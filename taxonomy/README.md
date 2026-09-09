@@ -1,49 +1,71 @@
 # Taxonomy schema
 
-Rows = **optimization pattern**. Columns = **kernel category** (v5e is the only
-hardware column for now; a hardware generation becomes a *second* axis once we add
-v5p/v6e -- see below).
+Follows Hawkeye's Table 3 / Appendix C.2 exactly: rows are recurring optimization
+strategies, columns are hardware generations. **We only have one column right now
+(`v5e/`)** -- a new generation later (`v5p/`, `v6e/`, ...) means adding a sibling
+directory with the same 10 row names, not redesigning anything.
 
-## Rows (patterns) to fill in, roughly in build order
+Each cell is a **generic, workload-agnostic** illustration of one technique -- not a
+JAXBench kernel. It exists so an agent that has never seen this TPU generation can
+learn the syntax and the profiler signature for one optimization in isolation, then
+compose several cells together itself when it goes to optimize a real workload.
 
-1. `memory_pipelining` -- HBM<->VMEM double/multi-buffered DMA (`pltpu.emit_pipeline`,
-   `make_async_copy`), hiding memory latency behind compute.
-2. `mxu_tiling` -- tile shapes as multiples of the dtype-dependent minimum
-   (8x128 fp32, 16x128 bf16, ...), avoiding relayouts that stall the MXU.
-3. `vpu_vectorization` -- keeping elementwise/reduction ops on the lane dimension,
-   avoiding scalar-core fallback.
-4. `grid_blockspec_design` -- `BlockSpec`/`index_map` choices, revisiting, prefetch
-   depth vs. VMEM budget.
-5. `precision_casting` -- fp32 vs bf16 vs int8, where TPU actually benefits vs. where
-   it just adds cast overhead.
-6. `ici_collectives` -- all-reduce/all-gather across the 8 chips on a v5e-8 slice,
-   relevant for sharded MoE/attention kernels.
+## The 10 rows, translated from Hawkeye's GPU taxonomy to Pallas/Mosaic/TPU
 
-## Columns (kernel categories)
+| # | Hawkeye (GPU) row | TPU translation | What it demonstrates |
+|---|---|---|---|
+| 1 | MMA Unit | **MXU Feed** | A matmul that actually lowers to the systolic array (MXU) vs. falling back to VPU emulation -- operand dtype/shape requirements |
+| 2 | Quantized Precision | **Precision Cascade** | bf16 -> int8 quantized matmul path (v5e's MXU supports int8, not fp8/fp4 like newer GPUs -- that's a real hardware difference from Hawkeye's GPUs) |
+| 3 | Shared Memory Layout | **VMEM Tile Layout** | Block/tile shapes that avoid relayouts (multiples of the dtype-dependent minimum, e.g. 8x128 fp32 / 16x128 bf16) |
+| 4 | Vectorized Memory | **Vectorized VMEM Load/Store** | Lane-aligned loads so the VPU doesn't fall back to scalar-core ops |
+| 5 | Async Pipeline | **HBM<->VMEM DMA Pipeline** | `pltpu.emit_pipeline` / `make_async_copy`, multi-stage buffering -- direct analogue of TMA/cp.async |
+| 6 | Producer/Consumer | **Grid-Step Overlap** | Prefetching the next grid step's block while computing the current one |
+| 7 | Epilogue Pipeline | **Fused Epilogue** | Fusing bias/activation/norm into the same kernel instead of separate ops (fewer HBM round trips) |
+| 8 | Warp/Wave Reduction | **Lane/Sublane Reduction** | Reductions that map to native cross-lane ops instead of naive loops |
+| 9 | Multi-Unit Coordination | **ICI Collective Coordination** | Cross-chip all-reduce/all-gather on the 8-chip v5e-8 slice (sharded MoE/attention) |
+| 10 | Persistent Scheduling | **Persistent Grid Scheduling** | Minimizing relaunch/pipeline-drain overhead across grid steps |
 
-Match JAXBench's own split so cells map directly onto eval workloads:
-`attention`, `moe_routing`, `matmul_fusion`, `normalization`.
+## Cell contents (`v5e/<NN>_<row_name>/`)
 
-## Cell contents (`patterns/<pattern>/<category>/`)
+Matching Hawkeye's four-artifact shape (Appendix C.2) exactly, just renamed for
+Python/Pallas instead of CUDA:
 
-- `naive.py` -- correct but unoptimized Pallas kernel for this pattern x category
-- `expert.py` -- hand-optimized version. Prefer copying from JAXBench's 8 hand-optimized
-  priority-kernel Pallas variants where the category overlaps, rather than writing from
-  scratch.
-- `metrics.yaml` -- the profiler signature that should change between naive and expert:
-  ```yaml
-  bottleneck_naive: dma_bound       # or mxu_bound, vmem_spill, scalar_fallback
-  bottleneck_expert: mxu_bound
-  mxu_utilization: {naive: 0.15, expert: 0.75}
-  roofline_regime: memory_bound      # arithmetic intensity vs v5e's 197 TFLOPS / 819 GB/s ridge point
+- `naive_kernel.py` -- deliberately unoptimized `workload(*inputs)`, so the profiler
+  counter this cell targets reads near zero. Establishes the floor the technique has
+  to beat.
+- `optimized_kernel.py` -- the one hand-written expert example. Callable directly, or
+  meant to be read as a syntax reference and composed into a larger kernel.
+- `config.json` -- machine-readable: which profiler counter proves this technique
+  fired, and which direction is "better." e.g.:
+  ```json
+  {
+    "cell_name": "async_pipeline",
+    "task_description": "Double-buffered HBM->VMEM DMA on v5e",
+    "profiling": {
+      "metrics": [{
+        "name": "dma_wait_fraction",
+        "description": "fraction of step time spent waiting on HBM->VMEM DMA",
+        "direction": "lower_is_better"
+      }]
+    }
+  }
   ```
-- `protocol.md` -- what the pattern is, why it helps, when an agent should reach for it
-  (the profiler symptom that should trigger retrieval of this cell).
+- `guide.md` -- prose protocol for anything the code + counter don't convey by
+  themselves (a buffering/phase protocol, a gotcha, when to reach for this vs. a
+  neighboring row).
 
-## Adding a generation column later
+## Why cells are separate from JAXBench workload kernels
 
-When v5p/v6e come online, don't duplicate the pattern rows. Add
-`patterns/<pattern>/<category>/<generation>/` only where the expert kernel or metrics
-actually differ by generation (e.g. v6e's higher bandwidth changes the roofline ridge
-point, tile minimums may differ) -- the `protocol.md` stays generation-agnostic unless
-the *pattern itself* doesn't apply on the new chip.
+The agent being evaluated (Section 2.4, Fig. 3) never edits taxonomy cells -- it reads
+them as reference material, then writes and iterates on its own kernel file for
+whatever JAXBench workload it's assigned, using `evaluate_kernel` (compile +
+correctness + benchmark, see [agent/runner.py](../agent/runner.py)) to check its work
+and profiler counters to decide what to try next. `kernel_pool/` (not yet built)
+accumulates the agent's own correct kernels from earlier workloads on the same
+architecture, so later workloads can reuse compositions it already found -- this is
+the cross-workload reuse Hawkeye describes in Appendix E.3.1.
+
+## Status
+
+Empty. Writing these 10 cells for v5e is the next real chunk of work -- see the repo
+README for sequencing.

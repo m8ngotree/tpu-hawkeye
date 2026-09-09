@@ -1,10 +1,13 @@
-"""Drive agent.loop.optimize() over JAXBench workloads and collect results.
+"""Drive agent.harness (not yet built) over JAXBench workloads and collect results.
 
 Usage (once implemented):
     python -m eval.run_agent_eval --workloads all --use-taxonomy --out results/taxonomy_run.json
     python -m eval.run_agent_eval --workloads all --no-use-taxonomy --out results/baseline_run.json
 
-Then diff the two result files for the speedup delta the taxonomy provides.
+Then diff the two result files for the speedup delta the taxonomy provides. See
+agent/README.md for what the harness needs to do per workload: give the agent
+evaluate_kernel + (optionally) read_taxonomy_cell/kernel_pool tools, a short system
+prompt, and a turn budget, then log the trajectory and the final kernel's result.
 """
 
 import argparse
@@ -23,7 +26,7 @@ def main() -> None:
     args = parser.parse_args()
 
     raise NotImplementedError(
-        "wire up agent.loop.optimize() per workload in "
+        "wire up agent.harness (once built) per workload in "
         f"{JAXBENCH_ROOT / 'benchmark'}, dump per-workload speedup to args.out"
     )
 
