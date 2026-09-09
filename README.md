@@ -13,11 +13,12 @@ Two separate things write code here:
 1. **The taxonomy** -- 10 small, generic, hand-written unit-test cells (one per
    recurring optimization technique: MXU feed, DMA pipelining, quantization, etc.),
    per TPU generation. We write these. See [taxonomy/README.md](taxonomy/README.md).
-2. **The coding agent** -- a separate LLM, given tools (`evaluate_kernel`,
-   `read_taxonomy_cell`, `kernel_pool`) and a short system prompt, autonomously writes
-   and iterates on kernels for JAXBench's 50 real workloads, in its own tool-use loop
-   (profile -> diagnose -> consult taxonomy -> edit -> re-evaluate). We don't write
-   these kernels -- the agent does, at evaluation time. See [agent/README.md](agent/README.md).
+2. **The coding agent** -- [OpenHands](https://docs.openhands.dev) (same backend the
+   Hawkeye paper itself used), given a generated workspace (task prompt, `eval.py`,
+   optionally `taxonomy/` + `kernel_pool/`) autonomously writes and iterates on
+   kernels for JAXBench's 50 real workloads, in its own bash-driven loop (profile ->
+   diagnose -> consult taxonomy -> edit -> re-evaluate). We don't write these kernels
+   -- the agent does, at evaluation time. See [agent/README.md](agent/README.md).
 
 The research question: run the same agent twice per workload, once with the taxonomy
 in its context and once without (same tools minus taxonomy access, same turn budget).
