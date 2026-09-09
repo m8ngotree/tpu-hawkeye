@@ -13,12 +13,14 @@ Two separate things write code here:
 1. **The taxonomy** -- 10 small, generic, hand-written unit-test cells (one per
    recurring optimization technique: MXU feed, DMA pipelining, quantization, etc.),
    per TPU generation. We write these. See [taxonomy/README.md](taxonomy/README.md).
-2. **The coding agent** -- [OpenHands](https://docs.openhands.dev) (same backend the
-   Hawkeye paper itself used), given a generated workspace (task prompt, `eval.py`,
-   optionally `taxonomy/` + `kernel_pool/`) autonomously writes and iterates on
-   kernels for JAXBench's 50 real workloads, in its own bash-driven loop (profile ->
-   diagnose -> consult taxonomy -> edit -> re-evaluate). We don't write these kernels
-   -- the agent does, at evaluation time. See [agent/README.md](agent/README.md).
+2. **The coding agent** -- a small hand-rolled tool-use loop (not the paper's own
+   OpenHands harness -- see [agent/README.md](agent/README.md) for why: OpenHands
+   needs Docker, Kaggle notebooks don't have it), model-agnostic via any
+   OpenAI-compatible API (DeepSeek by default, for cost). Given a generated workspace
+   (task prompt, `eval.py`, optionally `taxonomy/` + `kernel_pool/`) it autonomously
+   writes and iterates on kernels for JAXBench's 50 real workloads, in its own
+   tool-driven loop (profile -> diagnose -> consult taxonomy -> edit -> re-evaluate).
+   We don't write these kernels -- the agent does, at evaluation time.
 
 The research question: run the same agent twice per workload, once with the taxonomy
 in its context and once without (same tools minus taxonomy access, same turn budget).
@@ -49,13 +51,15 @@ taxonomy/
 
 agent/
   runner.py                    tool: evaluate_kernel (compile, correctness, benchmark) -- done
-  profiler.py                  tool: deeper profiler counters -- stub
-  tools.py                     tools: read_taxonomy_cell, kernel_pool_read/write -- done
-  harness.py                   wraps the tools for an LLM API, drives the turn loop -- not built
-                                 (LLM/agent-SDK choice not yet made)
+  tools_exec.py                 the 3 tools given to the agent LLM: read_file, write_file, run_bash -- done
+  harness.py                    the tool-use loop itself (OpenAI-compatible API, e.g. DeepSeek) -- done, unverified against a real API call
+  workspace.py                   builds the per-run agent workspace (task prompt, eval.py, taxonomy/, kernel_pool/) -- done
+  profiler.py                    tool: deeper profiler counters -- stub
+  tools.py                       our-side helpers: read_taxonomy_cell, kernel_pool_read/write -- done
 
 eval/
-  run_agent_eval.py            sweep the harness over JAXBench workloads, taxonomy vs. no-taxonomy
+  run_agent_eval.py            sweep the harness over JAXBench workloads, taxonomy vs. no-taxonomy -- stub
+  eval.py                       CLI the agent runs: `python eval.py --workload X --kernel kernel.py` -- done, verified
   smoke_test.py + smoke_kernels/  plumbing check for runner.py (no TPU needed) -- passing
 
 external/
@@ -68,6 +72,8 @@ results/                      run outputs + kernel_pool/ (gitignored except summ
 
 ## Status
 
-`runner.py` is implemented and verified end-to-end on CPU (see `eval/smoke_test.py`).
-Everything else is scaffolding. Next real chunk of work: write the 10 v5e taxonomy
-cells, then build `agent/harness.py` once the LLM backend is chosen.
+`runner.py`, `eval.py`, `tools_exec.py`, and `workspace.py` are implemented and
+verified end-to-end on CPU. `harness.py` is implemented but not yet exercised against
+a real LLM API call. Taxonomy cells are all empty. Next real chunk of work: write the
+10 v5e taxonomy cells, then smoke-test `harness.py` against one cheap agent turn
+before running a full sweep.

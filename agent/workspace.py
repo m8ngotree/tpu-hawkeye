@@ -1,10 +1,10 @@
-"""Build a per-run workspace directory for the OpenHands agent -- matches Hawkeye's
-workspace tree (paper Figure 22, page 23) and MSWEA task-prompt skeleton (Figure 48,
-page 45), adapted for JAXBench/Pallas instead of CUDA.
+"""Build a per-run workspace directory for the agent (agent/harness.py) -- matches
+Hawkeye's workspace tree (paper Figure 22, page 23) and MSWEA task-prompt skeleton
+(Figure 48, page 45), adapted for JAXBench/Pallas instead of CUDA.
 
-OpenHands drives the agent purely through bash + file edits inside this directory (no
-function-calling), so everything the agent needs -- the prompt, the eval script, the
-taxonomy cells, the kernel pool -- has to exist as real files it can `cat`/`python`/edit.
+The agent's run_bash/read_file/write_file tools (agent/tools_exec.py) operate purely
+on files inside this directory, so everything it needs -- the prompt, the eval
+script, the taxonomy cells, the kernel pool -- has to exist as real files here.
 """
 
 import json
