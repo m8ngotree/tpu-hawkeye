@@ -1,0 +1,13 @@
+[project]
+name = "tpu-hawkeye"
+version = "0.0.1"
+description = "Hardware-aware Pallas/TPU kernel optimization agent, evaluated on JAXBench"
+requires-python = ">=3.11"
+dependencies = [
+    "jax[tpu]",
+    "numpy",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]

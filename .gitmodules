@@ -1,0 +1,3 @@
+[submodule "external/accelerator-agents"]
+	path = external/accelerator-agents
+	url = https://github.com/m8ngotree/accelerator-agents.git
