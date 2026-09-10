@@ -41,7 +41,7 @@ $taxonomy_section$kernel_pool_section
 
 TAXONOMY_SECTION_TEMPLATE = Template(
     """\
-- `taxonomy/` -- $n_cells reference cells, one per TPU optimization technique. Each
+- `taxonomy/` -- $n_cells reference cell$plural, one per TPU optimization technique. Each
   has `naive_kernel.py` (unoptimized baseline for that technique), `optimized_kernel.py`
   (the hand-written expert example -- read this for syntax), `config.json` (which
   profiler counter proves the technique fired), `guide.md` (protocol notes). These are
@@ -87,7 +87,9 @@ def build_workspace(
         cell_names = sorted(p.name for p in gen_dir.iterdir() if p.is_dir()) if gen_dir.exists() else []
         if cell_names:
             shutil.copytree(gen_dir, out_dir / "taxonomy", dirs_exist_ok=True)
-            taxonomy_section = TAXONOMY_SECTION_TEMPLATE.substitute(n_cells=len(cell_names))
+            taxonomy_section = TAXONOMY_SECTION_TEMPLATE.substitute(
+                n_cells=len(cell_names), plural="" if len(cell_names) == 1 else "s"
+            )
 
     kernel_pool_section = ""
     if use_kernel_pool:

@@ -35,14 +35,14 @@ The speedup delta is the result.
 - **Later**: GCP TPU VMs for v5p / v6e (Trillium) / v7 (Ironwood), per
   [Cloud TPU pricing](https://cloud.google.com/tpu/pricing) -- compute isn't the
   constraint long-term. Each new generation is a new sibling directory under
-  `taxonomy/` (`v5p/`, `v6e/`, ...) with the same 10 row names, matching how Hawkeye
+  `taxonomy/` (`v5p/`, `v6e/`, ...) with the same row names, matching how Hawkeye
   adds a GPU architecture as one new column.
 
 ## Repo layout
 
 ```
 taxonomy/
-  v5e/<NN>_<row_name>/        10 cells for the v5e generation
+  v5e/<NN>_<row_name>/        7 cells for the v5e generation (trimmed from Hawkeye's 10 GPU rows -- see taxonomy/README.md)
     naive_kernel.py             deliberately unoptimized -- establishes the floor
     optimized_kernel.py           the one hand-written expert example for this technique
     config.json                    which profiler counter proves the technique fired
@@ -74,6 +74,7 @@ results/                      run outputs + kernel_pool/ (gitignored except summ
 
 `runner.py`, `eval.py`, `tools_exec.py`, and `workspace.py` are implemented and
 verified end-to-end on CPU. `harness.py` is implemented but not yet exercised against
-a real LLM API call. Taxonomy cells are all empty. Next real chunk of work: write the
-10 v5e taxonomy cells, then smoke-test `harness.py` against one cheap agent turn
-before running a full sweep.
+a real LLM API call. Taxonomy: `01_mxu_feed` written and correctness-verified
+(CPU/interpret mode only, not yet on real TPU hardware); 6 cells remain. Next real
+chunk of work: the rest of the taxonomy, then smoke-test `harness.py` against one
+cheap agent turn before running a full sweep.

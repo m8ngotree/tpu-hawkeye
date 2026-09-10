@@ -1,0 +1,19 @@
+{
+  "cell_name": "mxu_feed",
+  "task_description": "128x128x128 bf16 matmul inside a Pallas TPU kernel, comparing jnp.dot (MXU) against an equivalent broadcast-multiply-and-sum (VPU only).",
+  "profiling": {
+    "metrics": [
+      {
+        "name": "achieved_tflops_pct_of_peak_bf16",
+        "description": "achieved TFLOPS as a percentage of v5e's peak bf16 TFLOPS (197.0, see external/accelerator-agents/JAXBench/harness/tpu_specs.py). Computed the same way JAXBench's own utilization_pct is: measured_tflops / peak_tflops_bf16 * 100.",
+        "direction": "higher_is_better",
+        "expected_naive": "near 0% -- the whole computation runs on the VPU, never touches the MXU",
+        "expected_optimized": "meaningfully higher than naive at this problem size; won't be near 100% because 128x128x128 is a single small block, not enough work to fully saturate the pipeline -- the point of this cell is the naive-vs-optimized delta, not peak utilization"
+      }
+    ]
+  },
+  "verified": {
+    "interpret_mode_correctness": true,
+    "real_tpu_profiling": false
+  }
+}
