@@ -3,17 +3,19 @@
 Follows Hawkeye's Table 3 / Appendix C.2 shape (rows = recurring optimization
 strategies, columns = hardware generations), but not its row count -- **10 wasn't a
 target to hit, it's just what fell out of the GPU study.** We trimmed to 7 rows that
-matter for the core (single-chip) JAXBench workloads; see "Why 7, not 10" below for
-what got cut and why. **We only have one column right now (`v5e/`)** -- a new
-generation later (`v5p/`, `v6e/`, ...) means adding a sibling directory with the same
-row names, not redesigning anything.
+matter for the core (single-chip) JAXBench workloads, then added one back after
+actually reading all 50 JAXBench workloads and finding a real gap (`08_grouped_matmul`
+-- see "Row provenance" below for the full trace of what got cut, added, and why.
+**We only have one column right now (`v5e/`)** -- a new generation later (`v5p/`,
+`v6e/`, ...) means adding a sibling directory with the same row names, not
+redesigning anything.
 
 Each cell is a **generic, workload-agnostic** illustration of one technique -- not a
 JAXBench kernel. It exists so an agent that has never seen this TPU generation can
 learn the syntax and the profiler signature for one optimization in isolation, then
 compose several cells together itself when it goes to optimize a real workload.
 
-## The 7 rows, translated from Hawkeye's GPU taxonomy to Pallas/Mosaic/TPU
+## The 8 rows, translated from Hawkeye's GPU taxonomy to Pallas/Mosaic/TPU
 
 Directory names are final -- use these exactly when writing cells, they're what the
 agent will `ls`/`cat` to browse the taxonomy (see "How the agent finds a cell" below).
@@ -26,26 +28,49 @@ agent will `ls`/`cat` to browse the taxonomy (see "How the agent finds a cell" b
 | 4 | `04_async_pipeline` | Async Pipeline | `pltpu.emit_pipeline` / `make_async_copy`, multi-stage buffering -- direct analogue of TMA/cp.async |
 | 5 | `05_producer_consumer` | Producer/Consumer | Prefetching the next grid step's block while computing the current one |
 | 6 | `06_fused_epilogue` | Epilogue Pipeline | Fusing bias/activation/norm into the same kernel instead of separate ops (fewer HBM round trips) |
-| 7 | `07_lane_reduction` | Warp/Wave Reduction | Reductions that map to native cross-lane ops instead of naive loops |
+| 7 | `07_lane_reduction` | Warp/Wave Reduction | Reductions that map to native cross-lane ops instead of naive loops -- **including prefix-scan/cumulative reductions** (e.g. RetNet/Mamba2's log-space `cumsum` decay mask), not just full reductions |
+| 8 | `08_grouped_matmul` | *(no direct Hawkeye row -- see provenance below)* | Matmuls whose group/segment boundaries are data-dependent: gather-by-index (paged KV cache), masked dynamic-slice per group (MoE expert routing), instead of one static-shape matmul |
 
-## Why 7, not 10
+## Row provenance
 
-Cut two rows and folded one in:
+Cut two Hawkeye rows, folded one in, and added one that Hawkeye doesn't have at all
+(found by actually reading all 50 JAXBench workloads, not guessed in advance):
 
 - **Quantized Precision** (Hawkeye's int8/fp8 cascade row) -- dropped for now. Most
   JAXBench workloads run bf16; quantization is a real technique but a secondary
-  concern for a first taxonomy-vs-no-taxonomy result. Add back as `08_precision_cascade`
+  concern for a first taxonomy-vs-no-taxonomy result. Add back as `09_precision_cascade`
   if/when low-precision workloads become a focus.
 - **Multi-Unit Coordination** (ICI collectives across the 8 v5e-8 chips) -- dropped.
   Only matters for sharded multi-chip workloads, which is a small slice of JAXBench's
-  50 (mostly single-op, single-chip) tasks. Add back as `08_ici_collective` if a
+  50 (mostly single-op, single-chip) tasks. Add back as `09_ici_collective` if a
   sharded workload actually needs it.
 - **Persistent Scheduling** -- folded into `05_producer_consumer` rather than kept
   separate. On v5e (no megacore split, unlike v4/v5p), persistent-grid scheduling and
   producer/consumer overlap are close enough in practice that a separate cell would
   mostly repeat the same DMA-prefetch content.
+- **`08_grouped_matmul` -- added.** Read all 50 JAXBench workloads (not just the
+  17 "priority" ones) to check whether the 7-row set actually covers them. It mostly
+  does -- standard/GQA/MLA/Flex/Sparse attention, GEMM, SwiGLU, RMSNorm, Triangle
+  Multiplication, and the ~33 fused elementwise/GEMM/conv chains all map cleanly onto
+  MXU Feed + Fused Epilogue + Lane Reduction + the pipelining rows. But 5 workloads --
+  `6p_Paged_Attention`, `7p_Ragged_Paged_Attention`, `10p_Sparse_MoE`,
+  `11p_Megablox_GMM`, `14p_Ragged_Dot` -- share a pattern none of the 7 rows teach:
+  matmuls (or gathers feeding a matmul) whose group/segment boundaries are
+  data-dependent rather than static. `11p_Megablox_GMM`'s baseline literally uses
+  `jax.lax.scan` + `dynamic_slice`/`dynamic_update_slice` per expert group; the paged
+  attention workloads gather KV pages by an index table and scatter-add the output.
+  This is a different technique from tiling a dense matmul, not a variant of one, so
+  it earns its own row rather than a note inside `01_mxu_feed`.
+- **Convolutions -- explicitly NOT added, despite being real.** 8 of 50 workloads
+  (16%) use `lax.conv_general_dilated` fused with norm/activation. A hand-Pallas conv
+  kernel needs im2col-style patch extraction before it can feed the MXU, which is a
+  distinct technique from `01_mxu_feed`'s plain-matmul case. Deferred because XLA's
+  native conv lowering on TPU is already reasonable -- the agent can legitimately
+  leave convolutions to XLA rather than hand-write Pallas convs, so this gap doesn't
+  block a correct/adequate result the way grouped_matmul's did. Revisit if
+  convolution-heavy workloads become a specific focus.
 
-This list isn't sacred either -- if writing/testing these 7 surfaces a bottleneck the
+This list isn't sacred either -- if writing/testing these 8 surfaces a bottleneck the
 agent can identify but has no matching cell for, add a row then, grounded in a real
 gap instead of a guess.
 
@@ -109,5 +134,5 @@ the cross-workload reuse Hawkeye describes in Appendix E.3.1.
 `01_mxu_feed` written and correctness-verified via `interpret=True` (CPU) -- both
 kernels match a plain `jnp.dot` reference exactly. **Not yet verified on real v5e
 hardware** (the actual MXU-vs-VPU throughput claim needs a Kaggle TPU session, see
-that cell's `guide.md`). Remaining 6 cells not started -- see the repo README for
+that cell's `guide.md`). Remaining 7 cells not started -- see the repo README for
 sequencing.

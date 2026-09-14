@@ -42,7 +42,7 @@ The speedup delta is the result.
 
 ```
 taxonomy/
-  v5e/<NN>_<row_name>/        7 cells for the v5e generation (trimmed from Hawkeye's 10 GPU rows -- see taxonomy/README.md)
+  v5e/<NN>_<row_name>/        8 cells for the v5e generation (trimmed+adjusted from Hawkeye's 10 GPU rows -- see taxonomy/README.md)
     naive_kernel.py             deliberately unoptimized -- establishes the floor
     optimized_kernel.py           the one hand-written expert example for this technique
     config.json                    which profiler counter proves the technique fired
@@ -75,6 +75,6 @@ results/                      run outputs + kernel_pool/ (gitignored except summ
 `runner.py`, `eval.py`, `tools_exec.py`, and `workspace.py` are implemented and
 verified end-to-end on CPU. `harness.py` is implemented but not yet exercised against
 a real LLM API call. Taxonomy: `01_mxu_feed` written and correctness-verified
-(CPU/interpret mode only, not yet on real TPU hardware); 6 cells remain. Next real
+(CPU/interpret mode only, not yet on real TPU hardware); 7 cells remain. Next real
 chunk of work: the rest of the taxonomy, then smoke-test `harness.py` against one
 cheap agent turn before running a full sweep.

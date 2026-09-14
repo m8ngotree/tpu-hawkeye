@@ -76,7 +76,7 @@ Pass@1 sweep) is just re-running `run_agent()` with a different `model`/`base_ur
 
 Kernels for JAXBench workloads themselves (attention, GEMM, RMSNorm, ...) -- those
 are written by the coding agent at evaluation time, autonomously, using the workspace
-above. We don't hand-write them. The only kernels we hand-write are the 7 small
+above. We don't hand-write them. The only kernels we hand-write are the 8 small
 generic ones inside `taxonomy/v5e/*/` (see [taxonomy/README.md](../taxonomy/README.md)),
 which are illustrations of single techniques, not competitive implementations of any
 benchmark task.
