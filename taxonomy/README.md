@@ -131,8 +131,7 @@ the cross-workload reuse Hawkeye describes in Appendix E.3.1.
 
 ## Status
 
-`01_mxu_feed` written and correctness-verified via `interpret=True` (CPU) -- both
-kernels match a plain `jnp.dot` reference exactly. **Not yet verified on real v5e
-hardware** (the actual MXU-vs-VPU throughput claim needs a Kaggle TPU session, see
-that cell's `guide.md`). Remaining 7 cells not started -- see the repo README for
-sequencing.
+`01_mxu_feed` and `02_vmem_tile_layout` written and correctness-verified via
+`interpret=True` (CPU). **Neither verified on real v5e hardware yet** -- both cells'
+throughput/grid-step claims need a Kaggle TPU session (see each cell's `guide.md`).
+Remaining 6 cells not started -- see the repo README for sequencing.

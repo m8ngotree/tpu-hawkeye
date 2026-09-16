@@ -1,0 +1,24 @@
+{
+  "cell_name": "vmem_tile_layout",
+  "task_description": "Elementwise y = x*scale+bias over a 256x256 bf16 array, comparing a block shape misaligned to bf16's native (16,128) VMEM tile against an aligned one.",
+  "profiling": {
+    "metrics": [
+      {
+        "name": "achieved_tflops_pct_of_peak_bf16",
+        "description": "achieved throughput as a percentage of v5e's peak bf16 TFLOPS (197.0) -- same convention as 01_mxu_feed/config.json. This is a rough proxy here: this cell is memory/overhead-bound, not compute-bound, so the more direct signal is grid-step count and wall-clock time (both reported by naive_kernel.py/optimized_kernel.py's __main__ block), not TFLOPS.",
+        "direction": "higher_is_better"
+      },
+      {
+        "name": "num_grid_steps",
+        "description": "total pallas_call grid steps for the same logical array size. Naive: 256 (4x64 blocks over 256x256). Optimized: 16 (32x128 blocks). Purely a function of block shape choice, verifiable without any profiler.",
+        "direction": "lower_is_better",
+        "expected_naive": 256,
+        "expected_optimized": 16
+      }
+    ]
+  },
+  "verified": {
+    "interpret_mode_correctness": true,
+    "real_tpu_profiling": false
+  }
+}
