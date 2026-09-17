@@ -39,6 +39,17 @@ different levels:
 A kernel with pipelining correctly enabled can still stall if its buffer count is too
 shallow for its DMA/compute ratio -- that's what this cell catches that `04` doesn't.
 
+## Confirmed against official docs
+
+[Pallas's TPU pipelining guide](https://docs.jax.dev/en/latest/pallas/tpu/pipelining.html)
+documents `pl.Buffered` directly: default `buffer_count` is 2 for all inputs and
+outputs, matching this cell's naive baseline exactly. It also documents a related,
+separate knob this cell doesn't use: `pl.Buffered(buffer_count=N,
+use_lookahead=True)`, which lets the pipeline start fetching a future block as soon
+as a buffer slot frees up, "no matter how many iterations ahead that block is,"
+rather than only ever prefetching one step ahead of the current one. Worth trying if
+plain deeper buffering (this cell's approach) doesn't fully close a DMA-bound gap.
+
 ## Known limitation (found by testing, not documented)
 
 `buffer_count > 2` only works on **input** buffered refs in this jax/jaxlib version --

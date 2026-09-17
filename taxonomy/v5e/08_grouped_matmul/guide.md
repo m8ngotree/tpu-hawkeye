@@ -35,7 +35,7 @@ directly -- `G*K*N` vs. `K*N`. This cell uses a small `G=4` to keep the example 
 to verify locally, but the naive approach's cost scales with `G`; the optimized
 approach's doesn't.
 
-## Calling convention (verified by testing, not copied from a doc)
+## Calling convention (verified by testing, then confirmed against official docs)
 
 - The kernel body function receives the scalar-prefetch ref(s) **first**, before the
   regular block refs: `def kernel(group_id_ref, x_ref, w_ref, o_ref): ...`
@@ -47,8 +47,24 @@ approach's doesn't.
   `pallas_call(kernel, grid_spec=grid_spec, ...)(group_id, X, W)`
 
 This worked on the first attempt when tested against this project's jax/jaxlib
-version, but was not cross-checked against Pallas's own official documentation or
-examples -- treat it as verified-by-experiment, not verified-by-source.
+version, and matches the official
+["Scalar Prefetch and Block-Sparse Computation" guide](https://docs.jax.dev/en/latest/pallas/tpu/sparse.html)
+exactly: *"the user-defined kernel expects prefetch Refs to come before the input
+Refs... additionally, the scratch refs come after the output Refs"* and *"each
+BlockSpec's index_map now expects the prefetch Refs to come after the grid
+indices."* Full order: `kernel(*prefetch_refs, *input_refs, *output_refs,
+*scratch_refs)`.
+
+## Related pattern from the same official guide, not built here
+
+The block-sparse guide also documents skipping computation entirely for blocks a
+scalar-prefetch mask says are irrelevant: wrap the compute in `pl.when(condition)`,
+and multiply an index_map's fetch index by the mask so a skipped block doesn't even
+get DMA'd (`k_fetch = (block_mask[i, j] != 0) * k`). This is a real, related
+technique -- relevant to e.g. block-sparse attention -- but distinct enough from
+this cell's "which weight to fetch" question (this is "whether to fetch/compute at
+all") that it's noted here rather than folded in or given its own row, consistent
+with how `07_lane_reduction` handles the related-but-distinct prefix-scan case.
 
 ## When to reach for this vs. a neighboring cell
 

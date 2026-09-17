@@ -32,13 +32,21 @@ depending on version. Set this explicitly rather than relying on a default.
 
 ## Tile-size gotcha (not yet exercised by this cell's small 128x128x128 case)
 
-The MXU operates on 128x128 tiles. Reduction (K) dimensions and output tile
-dimensions that aren't multiples of the dtype-appropriate minimum (128 for bf16
-along the lane dimension, with the sublane-dimension minimum depending on dtype --
-8 for fp32, 16 for bf16) force Mosaic to pad or fall back to slower paths. This cell
-uses exactly 128x128x128 so the tiling question doesn't come up -- if you're adapting
-this pattern to a real workload with awkward shapes, that's `03_vectorized_vmem`'s
-and `02_vmem_tile_layout`'s territory, not this cell's.
+Pallas TPU's documented block-shape rule (see `02_vmem_tile_layout/guide.md`) is
+that a block's last two dimensions must be divisible by 8 and 128 respectively --
+uniform across dtypes, not dtype-dependent (an earlier version of this guide
+wrongly claimed a dtype-dependent minimum; corrected after checking Pallas's
+official TPU docs). Reduction (K) and output tile dimensions that violate this force
+Mosaic to pad or fall back to slower paths. This cell uses exactly 128x128x128 so the
+tiling question doesn't come up -- if you're adapting this pattern to a real
+workload with awkward shapes, that's `03_vectorized_vmem`'s and
+`02_vmem_tile_layout`'s territory, not this cell's. Separately, the official Pallas
+matmul tutorial shows that even a correct MXU-feeding matmul stays far under peak if
+its blocks are too small relative to the overall problem -- 128x128x128 blocks in a
+4096-cubed problem measure only ~6% utilization there, vs. ~78-91% with 512x1024x1024
+blocks. This cell's lesson (issue `jnp.dot`, not a manual loop) and that lesson
+(size blocks large enough to be compute-bound) are both real and both needed --
+neither one implies the other.
 
 ## When to reach for this vs. a neighboring cell
 

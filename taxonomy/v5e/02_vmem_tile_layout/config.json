@@ -1,6 +1,6 @@
 {
   "cell_name": "vmem_tile_layout",
-  "task_description": "Elementwise y = x*scale+bias over a 256x256 bf16 array, comparing a block shape misaligned to bf16's native (16,128) VMEM tile against an aligned one.",
+  "task_description": "Elementwise y = x*scale+bias over a 256x256 bf16 array, comparing a block shape that violates Pallas TPU's documented (8,128) minimum block-shape rule against one that satisfies it.",
   "profiling": {
     "metrics": [
       {

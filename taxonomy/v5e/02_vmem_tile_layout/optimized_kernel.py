@@ -1,12 +1,13 @@
 """Taxonomy cell 02_vmem_tile_layout -- OPTIMIZED (expert) variant.
 
 Identical math and output shape to naive_kernel.py, only the block shape changes:
-(32, 128) instead of (4, 64). (32, 128) is a whole-number multiple of bf16's native
-VMEM tile, (16, 128) -- 2x in the sublane dimension, 1x in the lane dimension -- so
-Mosaic can load/store each block without internal padding, and there are 16x fewer
-grid steps (16 vs. naive's 256) for the same total work.
+(32, 128) instead of (4, 64). (32, 128) satisfies Pallas TPU's documented block-shape
+rule -- last two dimensions divisible by 8 and 128 respectively (32 is 4x8, 128 is
+1x128) -- so Mosaic can load/store each block without internal padding, and there
+are 16x fewer grid steps (16 vs. naive's 256) for the same total work.
 
-See guide.md for the tiling rule and why it's dtype-dependent.
+See guide.md for the (8, 128) tiling rule (and a correction: an earlier version of
+this cell wrongly claimed it was dtype-dependent -- it isn't, per Pallas's docs).
 """
 
 import os

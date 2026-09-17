@@ -21,5 +21,5 @@
     "interpret_mode_correctness": true,
     "real_tpu_profiling": false
   },
-  "note": "Row added after reading all 50 JAXBench workloads (not one of Hawkeye's original 10 GPU rows) -- see taxonomy/README.md's 'Row provenance' section for why. optimized_kernel.py uses pltpu.PrefetchScalarGridSpec; its exact calling convention (scalar-prefetch ref first in both the kernel body and each BlockSpec's index_map) was verified by direct experimentation against this jax/jaxlib version, not copied from an official example -- the convention worked on the first attempt but has not been cross-checked against Pallas's own documentation."
+  "note": "Row added after reading all 50 JAXBench workloads (not one of Hawkeye's original 10 GPU rows) -- see taxonomy/README.md's 'Row provenance' section for why. optimized_kernel.py uses pltpu.PrefetchScalarGridSpec; its calling convention was first verified by direct experimentation against this jax/jaxlib version, then cross-checked against the official 'Scalar Prefetch and Block-Sparse Computation' guide (https://docs.jax.dev/en/latest/pallas/tpu/sparse.html), which confirms it exactly: kernel body receives prefetch refs before input refs before output refs before scratch refs; each index_map receives grid indices before prefetch refs."
 }
