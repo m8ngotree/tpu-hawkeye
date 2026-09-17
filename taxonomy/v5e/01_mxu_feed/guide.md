@@ -51,7 +51,7 @@ neither one implies the other.
 ## When to reach for this vs. a neighboring cell
 
 If `eval.py` reports correct output but low `utilization_pct` on something that's
-matmul-shaped (GEMM, attention's QK^T/softmax@V, any linear layer), check this cell
+matmul-shaped (a GEMM, or any batched/contraction-heavy op), check this cell
 first -- it's the most common root cause. If utilization is already reasonable but
 you're DMA-bound (profiler shows time waiting on HBM->VMEM transfers, not compute),
 that's `04_async_pipeline` instead.

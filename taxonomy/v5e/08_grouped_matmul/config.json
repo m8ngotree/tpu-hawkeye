@@ -1,11 +1,11 @@
 {
   "cell_name": "grouped_matmul",
-  "task_description": "Grouped matmul: 8 row-blocks of a (128, 64) input, each multiplied by one of 4 (64, 64) expert weight matrices per a per-block group_id array -- the core shape of MoE expert routing and paged-attention page-table gathers generally, not tied to any specific benchmark task.",
+  "task_description": "Grouped matmul: 8 row-blocks of a (128, 64) input, each multiplied by one of 4 (64, 64) candidate weight matrices per a per-block group_id array -- data-dependent block selection via scalar prefetch, not tied to any specific benchmark task, model, or architecture.",
   "profiling": {
     "metrics": [
       {
         "name": "vmem_resident_weight_elems",
-        "description": "number of weight-tensor elements resident in VMEM per grid step. Naive: G*K*N (all experts, every step). Optimized: K*N (only the routed expert, via scalar-prefetch-driven index_map). Exact and verifiable from the code/config alone -- this is what the technique actually buys, and it scales with G even though this cell uses a small G=4 to keep the example fast to verify.",
+        "description": "number of weight-tensor elements resident in VMEM per grid step. Naive: G*K*N (all candidate weight matrices, every step). Optimized: K*N (only the selected one, via scalar-prefetch-driven index_map). Exact and verifiable from the code/config alone -- this is what the technique actually buys, and it scales with G even though this cell uses a small G=4 to keep the example fast to verify.",
         "direction": "lower_is_better",
         "expected_naive": 16384,
         "expected_optimized": 4096

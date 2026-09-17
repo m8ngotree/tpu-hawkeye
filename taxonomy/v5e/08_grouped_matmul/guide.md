@@ -2,38 +2,36 @@
 
 ## What this is
 
-Some workloads don't have a single static matmul shape -- which weight matrix (or
-KV-cache page, or expert) a given block of rows needs depends on data computed
-earlier (a router's top-k choice, a page table). MoE layers are the clearest case:
-after tokens are routed to experts and sorted by assignment, each contiguous group
-of rows needs a *different* weight matrix, and which one isn't known until runtime.
-Paged attention has the same shape: which KV-cache pages a query needs depends on a
-page-index table, not a fixed offset.
+Some workloads don't have a single static matmul shape: which of several weight
+matrices a given block of rows should be multiplied by is decided by data computed
+earlier in the pipeline (an index or assignment array), not fixed at compile time.
+The naive way to handle this is to keep every candidate weight matrix VMEM-resident
+and select the right one with a plain array index inside the kernel body -- correct,
+but VMEM cost scales with how many candidates there are, even though any single grid
+step only ever needs one.
 
-This row didn't come from Hawkeye's original GPU taxonomy -- it was added because
-MoE-style routing and paged-KV-cache attention share this exact pattern and none of
-the other 7 rows teach it. (The specific evidence that motivated adding it lives in
-this project's internal research notes, deliberately kept out of this workspace --
-see the note on eval-set separation at the bottom of this file.)
+This row didn't come from Hawkeye's original GPU taxonomy -- it was added after
+finding that this specific pattern (fetch depends on a runtime-computed index, not a
+static offset) recurs and that none of the other 7 rows teach it.
 
 ## The rule
 
 `pltpu.PrefetchScalarGridSpec(num_scalar_prefetch=N, ...)` lets you pass small
-integer arrays (like a per-block group-id, or a page-index table) as **scalar
-prefetch** operands -- resident in SMEM before the pipeline starts, and readable from
-inside a `BlockSpec`'s `index_map` function. That means which block of a larger
-tensor gets DMA'd in for a given grid step can be **data-dependent**, decided by the
-prefetched array, instead of requiring the whole tensor to be VMEM-resident so you
-can index into it after the fact.
+integer arrays (a per-block group-id, any small index array) as **scalar prefetch**
+operands -- resident in SMEM before the pipeline starts, and readable from inside a
+`BlockSpec`'s `index_map` function. That means which block of a larger tensor gets
+DMA'd in for a given grid step can be **data-dependent**, decided by the prefetched
+array, instead of requiring the whole tensor to be VMEM-resident so you can index
+into it after the fact.
 
 Compare `naive_kernel.py` (loads the entire `(G, K, N)` weight tensor into VMEM every
 step, indexes into it with a plain array read inside the kernel body) against
 `optimized_kernel.py` (`group_id` as a scalar-prefetch operand; the weight
-`BlockSpec`'s `index_map` reads `group_id_ref[i]` to fetch only that step's expert's
-`(K, N)` slice). Both files' `__main__` blocks report `vmem_resident_weight_elems`
-directly -- `G*K*N` vs. `K*N`. This cell uses a small `G=4` to keep the example fast
-to verify locally, but the naive approach's cost scales with `G`; the optimized
-approach's doesn't.
+`BlockSpec`'s `index_map` reads `group_id_ref[i]` to fetch only that step's `(K, N)`
+slice). Both files' `__main__` blocks report `vmem_resident_weight_elems` directly --
+`G*K*N` vs. `K*N`. This cell uses a small `G=4` to keep the example fast to verify
+locally, but the naive approach's cost scales with `G`; the optimized approach's
+doesn't.
 
 ## Calling convention (verified by testing, then confirmed against official docs)
 
@@ -57,41 +55,39 @@ indices."* Full order: `kernel(*prefetch_refs, *input_refs, *output_refs,
 
 ## Related pattern from the same official guide, not built here
 
-The block-sparse guide also documents skipping computation entirely for blocks a
+The same guide also documents skipping computation entirely for blocks a
 scalar-prefetch mask says are irrelevant: wrap the compute in `pl.when(condition)`,
 and multiply an index_map's fetch index by the mask so a skipped block doesn't even
 get DMA'd (`k_fetch = (block_mask[i, j] != 0) * k`). This is a real, related
-technique -- relevant to e.g. block-sparse attention -- but distinct enough from
-this cell's "which weight to fetch" question (this is "whether to fetch/compute at
-all") that it's noted here rather than folded in or given its own row, consistent
-with how `07_lane_reduction` handles the related-but-distinct prefix-scan case.
+technique -- for cases with structural sparsity in which blocks matter at all -- but
+distinct enough from this cell's "which of several tensors to fetch" question (this
+is "whether to fetch/compute at all") that it's noted here rather than folded in or
+given its own row.
 
 ## When to reach for this vs. a neighboring cell
 
-If a workload's shape involves routing, grouping, or gathering by an index computed
-earlier in the same kernel/model (MoE dispatch, paged KV-cache, any "which weight
-matrix" decision that isn't known until runtime), this is the cell to consult before
-`01_mxu_feed` -- getting the matmul itself onto the MXU doesn't help if you're paying
-for `G`x too much VMEM traffic on the weight side first.
+If a workload's shape involves selecting which of several weight tensors (or other
+data blocks) to use per grid step, based on an index computed earlier rather than a
+fixed offset, this is the cell to consult before `01_mxu_feed` -- getting the matmul
+itself onto the MXU doesn't help if you're paying for `G`x too much VMEM traffic on
+the weight side first.
 
 ## Status
 
 Correctness verified locally via `interpret=True` (CPU, no TPU) -- both variants
 match a plain per-block reference matmul within JAXBench's tolerance
 (atol=rtol=1e-2). `vmem_resident_weight_elems` is exact from the code/config. The
-actual throughput/VMEM-pressure benefit on real silicon, and at a realistic expert
-count (production MoE models commonly route across dozens to hundreds of experts,
-far more than this cell's illustrative `G=4`), has **not** been measured on v5e
-hardware yet.
+actual throughput/VMEM-pressure benefit on real silicon, and at a much larger group
+count than this cell's illustrative `G=4`, has **not** been measured on v5e hardware
+yet.
 
 ## Note on eval-set separation
 
 This cell (like every taxonomy cell) is deliberately generic and doesn't name any
-specific benchmark task -- everything in `taxonomy/v5e/*/` gets copied verbatim into
-the workspace of the agent being *evaluated* on JAXBench, so naming which exact
-JAXBench tasks need this technique would leak evaluation-set-specific hints into the
-agent's own context, undermining the taxonomy-vs-no-taxonomy comparison this whole
-project exists to run. The reasoning that motivated adding this row (which specific
-workloads share this pattern) is real and was verified against actual JAXBench code,
-but lives only in this project's internal docs (`taxonomy/README.md`, which the
-workspace generator does not copy in) -- never in a file under `taxonomy/v5e/`.
+specific benchmark task, model, or architecture -- everything in `taxonomy/v5e/*/`
+gets copied verbatim into the workspace of the agent being *evaluated*, so naming
+which exact tasks need this technique, or which model architectures typically
+exhibit it, would leak hints that could bias what the agent looks for or reveal
+information specific to the eval set. This cell describes only the hardware/Pallas
+mechanism (data-dependent block selection via scalar prefetch) -- see
+`taxonomy/README.md`'s "Cell contents" section for the general rule this follows.

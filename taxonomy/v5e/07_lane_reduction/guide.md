@@ -2,13 +2,12 @@
 
 ## What this is
 
-Summing (or maxing, or otherwise reducing) across a dimension is common enough
-(softmax, RMSNorm, cross-entropy, pooling) that it's worth its own cell, distinct
-from `03_vectorized_vmem`'s general elementwise case: a reduction has to combine
-values across lanes into fewer outputs, which is a different hardware operation
-(and a different failure mode) than a plain elementwise vectorized op. Mosaic has a
-native cross-lane reduction path for `jnp.sum`/`jnp.max`/etc. -- a Python loop that
-manually accumulates one lane at a time gets correct output but bypasses it entirely.
+Combining values across a dimension into fewer outputs (a sum, a max, a mean) is a
+different hardware operation than a plain elementwise op -- it has to reduce across
+lanes, not just transform each one independently -- and Mosaic has a native
+cross-lane reduction path for it. A Python loop that manually accumulates one lane
+at a time gets correct output but bypasses that native path entirely, same failure
+mode as `03_vectorized_vmem` but specific to reductions.
 
 ## The rule
 
@@ -18,33 +17,25 @@ array/block, not a Python loop over the reduction axis. Compare `naive_kernel.py
 against `optimized_kernel.py` (`jnp.sum(x_ref[:, :], axis=1)` -- one call). Both
 files' `__main__` blocks report `num_reduce_ops` directly (128 vs. 1).
 
-## Prefix scans (cumulative reductions)
+## Running (cumulative) reductions
 
-A related but distinct pattern: some workloads need a *running* reduction rather
-than one final value per row -- e.g. linear-attention and state-space-style
-architectures often build a decay mask from a log-space cumulative sum
-(`jnp.cumsum(log_a, axis=-1)`) rather than a single final reduction. The same
-principle applies: `jnp.cumsum` maps to a native scan primitive, a manual loop
-computing running sums one step at a time does not. Verified locally that
-`jnp.cumsum` works correctly inside a Pallas kernel under `interpret=True` (same
-tolerance as the plain reduction case above) -- no naive/optimized pair built for
-this specifically, since it's the same underlying lesson as the row's main cell with
-a different JAX primitive (`jnp.cumsum` instead of `jnp.sum`), not a new technique.
-
-(This project deliberately keeps taxonomy cells free of references to specific
-benchmark tasks -- everything under `taxonomy/v5e/` is copied into the workspace of
-the agent being evaluated, so naming which exact benchmark tasks need a technique
-would leak eval-set-specific hints into that agent's own context. General
-architecture-family knowledge like "linear attention uses cumsum decay masks" is
-fine; naming a specific test file is not.)
+A related but distinct pattern: some workloads need a *running* reduction -- a
+value per position along an axis that accumulates everything up to that point --
+rather than one final value per row. `jnp.cumsum(x, axis=...)` is the vectorized
+way to write this; the same principle as the row's main cell applies: it maps to a
+native scan primitive, a manual loop computing running sums one step at a time does
+not. Verified locally that `jnp.cumsum` works correctly inside a Pallas kernel under
+`interpret=True` (same tolerance as the plain reduction case above) -- no
+naive/optimized pair built for this specifically, since it's the same underlying
+lesson with a different JAX primitive (`jnp.cumsum` instead of `jnp.sum`), not a new
+technique.
 
 ## When to reach for this vs. a neighboring cell
 
-If `eval.py` reports correct output but low throughput on a workload with a
-`sum`/`max`/`mean`/`cumsum` along some axis (softmax, norm, pooling, a decay mask),
-check whether that reduction is written as a loop. If the slow part is a matmul
-instead, that's `01_mxu_feed`. If it's a *non-reducing* elementwise op, that's
-`03_vectorized_vmem`.
+If `eval.py` reports correct output but low throughput on a workload that reduces
+along some axis (a sum, max, mean, or running/cumulative variant), check whether
+that reduction is written as a loop. If the slow part is a matmul instead, that's
+`01_mxu_feed`. If it's a *non-reducing* elementwise op, that's `03_vectorized_vmem`.
 
 ## Status
 

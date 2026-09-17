@@ -1,17 +1,17 @@
 """Taxonomy cell 08_grouped_matmul -- NAIVE variant.
 
-Grouped matmul: G=4 "expert" weight matrices of shape (K, N); the input's M rows are
-split into 8 contiguous blocks of BLOCK_M rows, and `group_id[i]` says which expert's
-weight matrix block i's rows should be multiplied by -- the general shape of MoE
-routing after tokens are sorted by assigned expert.
+Grouped matmul: G=4 candidate weight matrices of shape (K, N); the input's M rows are
+split into 8 contiguous blocks of BLOCK_M rows, and `group_id[i]` says which of the
+G weight matrices block i's rows should be multiplied by -- a runtime-computed
+selection, not a static one.
 
 This naive version doesn't use scalar-prefetch at all: the ENTIRE (G, K, N) weight
 tensor is kept VMEM-resident for every grid step (BlockSpec index_map always returns
-(0, 0, 0)), and the per-block expert selection happens via a plain array index
+(0, 0, 0)), and the per-block selection happens via a plain array index
 (`w_all_ref[g]`) inside the kernel body. Correct, but VMEM footprint for the weight
-tensor is O(G*K*N) -- all experts, all the time -- when any single step only ever
-needs one expert's K*N slice. That doesn't scale: more experts means more VMEM spent
-on weights you're not using this step, regardless of how many you actually route to.
+tensor is O(G*K*N) -- every candidate, all the time -- when any single step only ever
+needs one K*N slice. That doesn't scale: more candidates means more VMEM spent on
+weights you're not using this step, regardless of how many you actually select.
 
 See optimized_kernel.py for the scalar-prefetch alternative: O(K*N) VMEM per step
 instead of O(G*K*N).
@@ -42,7 +42,7 @@ def create_inputs(dtype=jnp.bfloat16):
     M = BLOCK_M * num_blocks
     X = jax.random.normal(k1, (M, K), dtype=dtype)
     W = jax.random.normal(k2, (G, K, N), dtype=dtype) * 0.1
-    # Round-robin group assignment per block -- exercises every expert at least once.
+    # Round-robin group assignment per block -- exercises every group at least once.
     group_id = jnp.array([i % G for i in range(num_blocks)], dtype=jnp.int32)
     return X, W, group_id
 

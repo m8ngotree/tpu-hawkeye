@@ -1,17 +1,18 @@
 """Taxonomy cell 08_grouped_matmul -- OPTIMIZED (expert) variant.
 
-Identical grouped matmul to naive_kernel.py -- same G=4 experts, same per-block
-group assignment -- but using `pltpu.PrefetchScalarGridSpec` instead of loading the
-whole weight tensor. `group_id` is passed as a SCALAR PREFETCH operand: it's resident
-in SMEM before the pipeline starts, and `index_map` functions can read it to decide,
-data-dependently, WHICH block of the weight tensor to DMA in for each grid step
-(`group_id_ref[i]` selects the expert). Only that one expert's (K, N) slice is ever
-VMEM-resident at a time -- O(K*N) per step instead of naive_kernel.py's O(G*K*N).
+Identical grouped matmul to naive_kernel.py -- same G=4 candidate weight matrices,
+same per-block group assignment -- but using `pltpu.PrefetchScalarGridSpec` instead
+of loading the whole weight tensor. `group_id` is passed as a SCALAR PREFETCH
+operand: it's resident in SMEM before the pipeline starts, and `index_map` functions
+can read it to decide, data-dependently, WHICH block of the weight tensor to DMA in
+for each grid step (`group_id_ref[i]` selects which one). Only that one (K, N) slice
+is ever VMEM-resident at a time -- O(K*N) per step instead of naive_kernel.py's
+O(G*K*N).
 
-This is the real Pallas idiom for MoE-style routing (used in JAX's own grouped-matmul
-kernels for mixture-of-experts), and scales to large G the way the naive approach
-doesn't -- the naive kernel's VMEM footprint grows with the number of experts even
-though only one is used per step; this one's doesn't.
+This is the real Pallas idiom for data-dependent block selection (used in JAX's own
+grouped-matmul kernels), and scales to large G the way the naive approach doesn't --
+the naive kernel's VMEM footprint grows with the number of candidates even though
+only one is used per step; this one's doesn't.
 """
 
 import os
@@ -45,8 +46,8 @@ def create_inputs(dtype=jnp.bfloat16):
 
 def _kernel(group_id_ref, x_ref, w_ref, o_ref):
     # group_id_ref is the scalar-prefetch ref -- already consulted by index_map below
-    # to pick which expert's weight block got DMA'd in; the kernel body itself just
-    # uses whatever arrived.
+    # to pick which weight block got DMA'd in; the kernel body itself just uses
+    # whatever arrived.
     o_ref[:, :] = jnp.dot(x_ref[:, :], w_ref[0, :, :], preferred_element_type=jnp.float32)
 
 
