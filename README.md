@@ -74,7 +74,8 @@ results/                      run outputs + kernel_pool/ (gitignored except summ
 
 `runner.py`, `eval.py`, `tools_exec.py`, and `workspace.py` are implemented and
 verified end-to-end on CPU. `harness.py` is implemented but not yet exercised against
-a real LLM API call. Taxonomy: `01_mxu_feed` through `05_producer_consumer` written
-and correctness-verified (CPU/interpret mode only, not yet on real TPU hardware); 3
-cells remain. Next real chunk of work: the rest of the taxonomy, then smoke-test
-`harness.py` against one cheap agent turn before running a full sweep.
+a real LLM API call. **All 8 taxonomy cells are written and correctness-verified**
+(CPU/interpret mode only -- none verified on real TPU hardware yet). Next real chunk
+of work: smoke-test `harness.py` against one cheap agent turn, then a Kaggle TPU
+session to verify the taxonomy cells' actual throughput claims, before running a full
+eval sweep.

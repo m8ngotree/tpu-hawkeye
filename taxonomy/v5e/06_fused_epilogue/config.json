@@ -1,0 +1,24 @@
+{
+  "cell_name": "fused_epilogue",
+  "task_description": "relu(A @ B + bias) for 128x128x128 bf16 matmul, comparing two separate pallas_call invocations (matmul, then epilogue) against one fused invocation.",
+  "profiling": {
+    "metrics": [
+      {
+        "name": "num_pallas_calls",
+        "description": "number of pallas_call invocations in workload(). Naive: 2 (the intermediate matmul result round-trips through HBM between them). Optimized: 1. Exact and verifiable from the code alone.",
+        "direction": "lower_is_better",
+        "expected_naive": 2,
+        "expected_optimized": 1
+      },
+      {
+        "name": "achieved_tflops_pct_of_peak_bf16",
+        "description": "achieved throughput as % of v5e peak bf16 TFLOPS (197.0), same convention as 01_mxu_feed. Secondary/confirmatory signal here -- num_pallas_calls is the more direct one.",
+        "direction": "higher_is_better"
+      }
+    ]
+  },
+  "verified": {
+    "interpret_mode_correctness": true,
+    "real_tpu_profiling": false
+  }
+}

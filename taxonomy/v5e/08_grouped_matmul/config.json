@@ -1,0 +1,25 @@
+{
+  "cell_name": "grouped_matmul",
+  "task_description": "Grouped matmul: 8 row-blocks of a (128, 64) input, each multiplied by one of 4 (64, 64) expert weight matrices per a per-block group_id array -- the core shape of MoE routing (JAXBench's 10p_Sparse_MoE, 11p_Megablox_GMM, 14p_Ragged_Dot) and paged-attention page-table gathers (6p/7p).",
+  "profiling": {
+    "metrics": [
+      {
+        "name": "vmem_resident_weight_elems",
+        "description": "number of weight-tensor elements resident in VMEM per grid step. Naive: G*K*N (all experts, every step). Optimized: K*N (only the routed expert, via scalar-prefetch-driven index_map). Exact and verifiable from the code/config alone -- this is what the technique actually buys, and it scales with G even though this cell uses a small G=4 to keep the example fast to verify.",
+        "direction": "lower_is_better",
+        "expected_naive": 16384,
+        "expected_optimized": 4096
+      },
+      {
+        "name": "achieved_tflops_pct_of_peak_bf16",
+        "description": "secondary/confirmatory signal, same convention as other cells. At this cell's small scale the VMEM-footprint story is the more direct one; the throughput gap should widen with larger G.",
+        "direction": "higher_is_better"
+      }
+    ]
+  },
+  "verified": {
+    "interpret_mode_correctness": true,
+    "real_tpu_profiling": false
+  },
+  "note": "Row added after reading all 50 JAXBench workloads (not one of Hawkeye's original 10 GPU rows) -- see taxonomy/README.md's 'Row provenance' section for why. optimized_kernel.py uses pltpu.PrefetchScalarGridSpec; its exact calling convention (scalar-prefetch ref first in both the kernel body and each BlockSpec's index_map) was verified by direct experimentation against this jax/jaxlib version, not copied from an official example -- the convention worked on the first attempt but has not been cross-checked against Pallas's own documentation."
+}

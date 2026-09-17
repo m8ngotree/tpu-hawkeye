@@ -131,8 +131,10 @@ the cross-workload reuse Hawkeye describes in Appendix E.3.1.
 
 ## Status
 
-`01_mxu_feed` through `05_producer_consumer` written and correctness-verified via
-`interpret=True` (CPU). **None verified on real v5e hardware yet** -- all five cells'
-throughput claims need a Kaggle TPU session (see each cell's `guide.md`). Remaining 3
-cells not started -- see the repo README for
-sequencing.
+**All 8 cells written and correctness-verified via `interpret=True` (CPU).** `08_grouped_matmul`
+additionally required verifying `pltpu.PrefetchScalarGridSpec`'s calling convention
+by direct experimentation (worked first try; not cross-checked against official
+Pallas docs -- see that cell's `guide.md`). **None of the 8 cells' actual throughput
+claims are verified on real v5e hardware yet** -- that's the next real gap, not more
+taxonomy content. See each cell's `guide.md` for what specifically needs a Kaggle TPU
+session to confirm.
