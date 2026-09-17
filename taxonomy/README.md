@@ -118,6 +118,26 @@ Python/Pallas instead of CUDA:
   themselves (a buffering/phase protocol, a gotcha, when to reach for this vs. a
   neighboring row).
 
+**Hard rule for all four files, no exceptions: never name a specific JAXBench
+workload (its file/directory name, its exact CONFIG values, or the model it's
+labeled after -- e.g. "Llama-3.1-70B", "Mixtral-8x7B") inside any of them.**
+Everything under `taxonomy/v5e/<cell>/` gets copied verbatim into the workspace of
+the agent being *evaluated* against JAXBench (see `agent/workspace.py`) -- naming
+which exact benchmark tasks need a technique leaks evaluation-set-specific hints
+into that agent's own context, which would invalidate the taxonomy-vs-no-taxonomy
+comparison this whole project exists to run. General ML domain knowledge is fine
+("linear-attention architectures often use a cumsum-based decay mask"); a specific
+test file's name or hyperparameters are not, even as a passing example. This was
+violated in an earlier draft of several cells (specific workload names had leaked
+into `06_fused_epilogue`, `07_lane_reduction`, and `08_grouped_matmul`'s prose) and
+fixed after being caught -- if you're writing a new cell, check your draft against
+this rule before it's done, not after.
+
+This file (`taxonomy/README.md`) and everything else outside `taxonomy/v5e/` is
+the one place workload-specific reasoning belongs -- it's never copied into an
+agent's workspace, so it's safe for our own research notes (see "Row provenance"
+above, which does name specific workloads on purpose).
+
 ## Why cells are separate from JAXBench workload kernels
 
 The agent being evaluated (Section 2.4, Fig. 3) never edits taxonomy cells -- it reads

@@ -10,11 +10,11 @@ of rows needs a *different* weight matrix, and which one isn't known until runti
 Paged attention has the same shape: which KV-cache pages a query needs depends on a
 page-index table, not a fixed offset.
 
-This row didn't come from Hawkeye's original GPU taxonomy -- it was added after
-reading all 50 JAXBench workloads and finding that 5 of them (`6p`/`7p` paged
-attention, `10p`/`11p`/`14p` MoE-family) share this exact pattern and that none of
-the other 7 rows teach it. See `taxonomy/README.md`'s "Row provenance" section for
-the full reasoning.
+This row didn't come from Hawkeye's original GPU taxonomy -- it was added because
+MoE-style routing and paged-KV-cache attention share this exact pattern and none of
+the other 7 rows teach it. (The specific evidence that motivated adding it lives in
+this project's internal research notes, deliberately kept out of this workspace --
+see the note on eval-set separation at the bottom of this file.)
 
 ## The rule
 
@@ -79,6 +79,19 @@ for `G`x too much VMEM traffic on the weight side first.
 Correctness verified locally via `interpret=True` (CPU, no TPU) -- both variants
 match a plain per-block reference matmul within JAXBench's tolerance
 (atol=rtol=1e-2). `vmem_resident_weight_elems` is exact from the code/config. The
-actual throughput/VMEM-pressure benefit on real silicon, and at a realistic `G`
-(JAXBench's `11p_Megablox_GMM` uses G=128), has **not** been measured on v5e hardware
-yet.
+actual throughput/VMEM-pressure benefit on real silicon, and at a realistic expert
+count (production MoE models commonly route across dozens to hundreds of experts,
+far more than this cell's illustrative `G=4`), has **not** been measured on v5e
+hardware yet.
+
+## Note on eval-set separation
+
+This cell (like every taxonomy cell) is deliberately generic and doesn't name any
+specific benchmark task -- everything in `taxonomy/v5e/*/` gets copied verbatim into
+the workspace of the agent being *evaluated* on JAXBench, so naming which exact
+JAXBench tasks need this technique would leak evaluation-set-specific hints into the
+agent's own context, undermining the taxonomy-vs-no-taxonomy comparison this whole
+project exists to run. The reasoning that motivated adding this row (which specific
+workloads share this pattern) is real and was verified against actual JAXBench code,
+but lives only in this project's internal docs (`taxonomy/README.md`, which the
+workspace generator does not copy in) -- never in a file under `taxonomy/v5e/`.

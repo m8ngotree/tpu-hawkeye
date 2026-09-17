@@ -21,5 +21,5 @@
     "interpret_mode_correctness": true,
     "real_tpu_profiling": false
   },
-  "note": "This row also covers prefix-scan / cumulative reductions (e.g. a log-space cumsum used to build a decay mask, as in RetNet/Mamba2-style attention variants in JAXBench) -- see guide.md's 'Prefix scans' section. Not a separate cell: same underlying principle (native op vs. manual loop), different JAX primitive (jnp.cumsum vs. jnp.sum)."
+  "note": "This row also covers prefix-scan / cumulative reductions (e.g. a log-space cumsum used to build a decay mask, common in linear-attention/state-space-style architectures generally) -- see guide.md's 'Prefix scans' section. Not a separate cell: same underlying principle (native op vs. manual loop), different JAX primitive (jnp.cumsum vs. jnp.sum)."
 }

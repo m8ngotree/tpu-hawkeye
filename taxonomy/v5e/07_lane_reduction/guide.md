@@ -21,15 +21,22 @@ files' `__main__` blocks report `num_reduce_ops` directly (128 vs. 1).
 ## Prefix scans (cumulative reductions)
 
 A related but distinct pattern: some workloads need a *running* reduction rather
-than one final value per row -- e.g. RetNet/Mamba2-style linear-attention variants
-build their decay mask from `jnp.cumsum(log_a, axis=-1)` (JAXBench's
-`15p_RetNet_Retention`/`16p_Mamba2_SSD` baselines both do this). The same principle
-applies: `jnp.cumsum` maps to a native scan primitive, a manual loop computing
-running sums one step at a time does not. Verified locally that `jnp.cumsum` works
-correctly inside a Pallas kernel under `interpret=True` (same tolerance as the plain
-reduction case above) -- no naive/optimized pair built for this specifically, since
-it's the same underlying lesson as the row's main cell with a different JAX
-primitive (`jnp.cumsum` instead of `jnp.sum`), not a new technique.
+than one final value per row -- e.g. linear-attention and state-space-style
+architectures often build a decay mask from a log-space cumulative sum
+(`jnp.cumsum(log_a, axis=-1)`) rather than a single final reduction. The same
+principle applies: `jnp.cumsum` maps to a native scan primitive, a manual loop
+computing running sums one step at a time does not. Verified locally that
+`jnp.cumsum` works correctly inside a Pallas kernel under `interpret=True` (same
+tolerance as the plain reduction case above) -- no naive/optimized pair built for
+this specifically, since it's the same underlying lesson as the row's main cell with
+a different JAX primitive (`jnp.cumsum` instead of `jnp.sum`), not a new technique.
+
+(This project deliberately keeps taxonomy cells free of references to specific
+benchmark tasks -- everything under `taxonomy/v5e/` is copied into the workspace of
+the agent being evaluated, so naming which exact benchmark tasks need a technique
+would leak eval-set-specific hints into that agent's own context. General
+architecture-family knowledge like "linear attention uses cumsum decay masks" is
+fine; naming a specific test file is not.)
 
 ## When to reach for this vs. a neighboring cell
 

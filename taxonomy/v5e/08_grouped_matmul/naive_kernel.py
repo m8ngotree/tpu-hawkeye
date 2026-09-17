@@ -2,9 +2,8 @@
 
 Grouped matmul: G=4 "expert" weight matrices of shape (K, N); the input's M rows are
 split into 8 contiguous blocks of BLOCK_M rows, and `group_id[i]` says which expert's
-weight matrix block i's rows should be multiplied by (this is the shape of
-JAXBench's `10p_Sparse_MoE`/`11p_Megablox_GMM`/`14p_Ragged_Dot` -- MoE routing after
-tokens are sorted by assigned expert).
+weight matrix block i's rows should be multiplied by -- the general shape of MoE
+routing after tokens are sorted by assigned expert.
 
 This naive version doesn't use scalar-prefetch at all: the ENTIRE (G, K, N) weight
 tensor is kept VMEM-resident for every grid step (BlockSpec index_map always returns

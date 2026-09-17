@@ -10,9 +10,15 @@ outside the two kernels ever needed that intermediate value. For a "final op" li
 bias-add + activation that immediately follows a matmul, that round trip is pure
 overhead -- the data was already sitting in VMEM right after the matmul finished.
 
-This is most of what JAXBench's ~33 "k-series" fused-operator workloads are testing
-(`Gemm_Add_ReLU`, `Conv2d_GroupNorm_Tanh_HardSwish_ResidualAdd_LogSumExp`, etc.) --
-whether an agent fuses the whole chain into one kernel or leaves it as separate ops.
+This is a common shape in fused-operator workloads generally -- a matmul or
+convolution followed by a chain of activation/normalization/pooling ops -- and
+whether that whole chain lands in one kernel or stays split across several is often
+the single biggest lever available.
+
+(This project deliberately keeps taxonomy cells free of references to specific
+benchmark tasks -- everything under `taxonomy/v5e/` is copied into the workspace of
+the agent being evaluated, so naming which exact benchmark tasks need a technique
+would leak eval-set-specific hints into that agent's own context.)
 
 ## The rule
 

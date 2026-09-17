@@ -1,6 +1,6 @@
 {
   "cell_name": "grouped_matmul",
-  "task_description": "Grouped matmul: 8 row-blocks of a (128, 64) input, each multiplied by one of 4 (64, 64) expert weight matrices per a per-block group_id array -- the core shape of MoE routing (JAXBench's 10p_Sparse_MoE, 11p_Megablox_GMM, 14p_Ragged_Dot) and paged-attention page-table gathers (6p/7p).",
+  "task_description": "Grouped matmul: 8 row-blocks of a (128, 64) input, each multiplied by one of 4 (64, 64) expert weight matrices per a per-block group_id array -- the core shape of MoE expert routing and paged-attention page-table gathers generally, not tied to any specific benchmark task.",
   "profiling": {
     "metrics": [
       {
