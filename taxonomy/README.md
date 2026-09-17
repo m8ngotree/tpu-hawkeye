@@ -26,7 +26,7 @@ agent will `ls`/`cat` to browse the taxonomy (see "How the agent finds a cell" b
 | 2 | `02_vmem_tile_layout` | Shared Memory Layout | Block/tile shapes that avoid relayouts (multiples of the dtype-dependent minimum, e.g. 8x128 fp32 / 16x128 bf16) |
 | 3 | `03_vectorized_vmem` | Vectorized Memory | Lane-aligned loads so the VPU doesn't fall back to scalar-core ops |
 | 4 | `04_async_pipeline` | Async Pipeline | `pltpu.emit_pipeline` / `make_async_copy`, multi-stage buffering -- direct analogue of TMA/cp.async |
-| 5 | `05_producer_consumer` | Producer/Consumer | Prefetching the next grid step's block while computing the current one |
+| 5 | `05_producer_consumer` | Producer/Consumer | Multi-stage buffering depth (2-stage vs. 3+-stage prefetch) -- how far ahead the DMA "producer" can run of the compute "consumer," distinct from `04_async_pipeline`'s on/off overlap toggle |
 | 6 | `06_fused_epilogue` | Epilogue Pipeline | Fusing bias/activation/norm into the same kernel instead of separate ops (fewer HBM round trips) |
 | 7 | `07_lane_reduction` | Warp/Wave Reduction | Reductions that map to native cross-lane ops instead of naive loops -- **including prefix-scan/cumulative reductions** (e.g. RetNet/Mamba2's log-space `cumsum` decay mask), not just full reductions |
 | 8 | `08_grouped_matmul` | *(no direct Hawkeye row -- see provenance below)* | Matmuls whose group/segment boundaries are data-dependent: gather-by-index (paged KV cache), masked dynamic-slice per group (MoE expert routing), instead of one static-shape matmul |
@@ -131,8 +131,8 @@ the cross-workload reuse Hawkeye describes in Appendix E.3.1.
 
 ## Status
 
-`01_mxu_feed`, `02_vmem_tile_layout`, `03_vectorized_vmem`, and `04_async_pipeline`
-written and correctness-verified via `interpret=True` (CPU). **None verified on real
-v5e hardware yet** -- all four cells' throughput claims need a Kaggle TPU session
-(see each cell's `guide.md`). Remaining 4 cells not started -- see the repo README for
+`01_mxu_feed` through `05_producer_consumer` written and correctness-verified via
+`interpret=True` (CPU). **None verified on real v5e hardware yet** -- all five cells'
+throughput claims need a Kaggle TPU session (see each cell's `guide.md`). Remaining 3
+cells not started -- see the repo README for
 sequencing.

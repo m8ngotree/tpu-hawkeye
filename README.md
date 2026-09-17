@@ -74,8 +74,7 @@ results/                      run outputs + kernel_pool/ (gitignored except summ
 
 `runner.py`, `eval.py`, `tools_exec.py`, and `workspace.py` are implemented and
 verified end-to-end on CPU. `harness.py` is implemented but not yet exercised against
-a real LLM API call. Taxonomy: `01_mxu_feed`, `02_vmem_tile_layout`,
-`03_vectorized_vmem`, and `04_async_pipeline` written and correctness-verified
-(CPU/interpret mode only, not yet on real TPU hardware); 4 cells remain. Next real
-chunk of work: the rest of the taxonomy, then smoke-test
+a real LLM API call. Taxonomy: `01_mxu_feed` through `05_producer_consumer` written
+and correctness-verified (CPU/interpret mode only, not yet on real TPU hardware); 3
+cells remain. Next real chunk of work: the rest of the taxonomy, then smoke-test
 `harness.py` against one cheap agent turn before running a full sweep.
