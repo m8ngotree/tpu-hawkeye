@@ -1,17 +1,12 @@
 """Taxonomy cell 02_vmem_tile_layout -- NAIVE variant.
 
-An elementwise `y = x * SCALE + BIAS` over a 256x256 bf16 array, gridded with a block
-shape (4, 64) that does NOT satisfy Pallas TPU's documented block-shape rule: the
-last two dimensions must be divisible by 8 and 128 respectively (uniformly across
-dtypes -- see guide.md's correction note; an earlier version of this cell wrongly
-claimed this rule was dtype-dependent). 4 isn't a multiple of 8; 64 isn't a multiple
-of 128. Every block Mosaic loads/stores has to be padded up to the (8, 128) tile
-boundary internally, and with a (4, 64) block there are 16x more grid steps than
-necessary (256 steps vs. optimized_kernel.py's 16) -- most of that work is
-padding/bookkeeping, not useful computation.
+Elementwise `y = x * SCALE + BIAS` over a 256x256 bf16 array, gridded with a (4, 64)
+block. Pallas TPU requires a block's last two dimensions to be divisible by 8 and 128
+respectively (independent of dtype); 4 is not a multiple of 8 and 64 is not a
+multiple of 128. Mosaic pads each block up to the (8, 128) tile boundary, and the
+small block yields 256 grid steps versus optimized_kernel.py's 16.
 
-Same math, same output shape as optimized_kernel.py -- only the block shape differs.
-See guide.md for the (8, 128) tiling rule this cell demonstrates.
+Same math and output shape as optimized_kernel.py; only the block shape differs.
 """
 
 import os

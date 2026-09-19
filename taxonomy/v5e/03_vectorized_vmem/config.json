@@ -1,24 +1,20 @@
 {
   "cell_name": "vectorized_vmem",
-  "task_description": "Elementwise y = x*scale+bias over a 128x128 bf16 array, comparing a per-lane Python loop (N single-lane VMEM accesses) against one vectorized statement over the full block.",
+  "task_description": "Elementwise y = x*scale + bias over a 128x128 bf16 array: per-lane Python loop (N single-lane VMEM accesses) versus one whole-block statement.",
   "profiling": {
     "metrics": [
       {
         "name": "num_vmem_ops",
-        "description": "number of distinct VMEM read/write operations the kernel body issues for one block. Naive: N (one per lane column). Optimized: 1. Exact and verifiable from the code/trace alone, no profiler needed -- reported directly by each file's __main__ block.",
+        "description": "Number of distinct VMEM read/write operations issued by the kernel body per block.",
         "direction": "lower_is_better",
         "expected_naive": 128,
         "expected_optimized": 1
       },
       {
         "name": "achieved_tflops_pct_of_peak_bf16",
-        "description": "achieved throughput as % of v5e peak bf16 TFLOPS (197.0), same convention as 01_mxu_feed. As with 02_vmem_tile_layout, this cell is not compute-bound, so num_vmem_ops is the more direct signal -- this metric is secondary/confirmatory.",
+        "description": "Achieved TFLOPS as a percentage of v5e peak bf16 TFLOPS (197.0). Secondary signal; this kernel is not compute-bound.",
         "direction": "higher_is_better"
       }
     ]
-  },
-  "verified": {
-    "interpret_mode_correctness": true,
-    "real_tpu_profiling": false
   }
 }

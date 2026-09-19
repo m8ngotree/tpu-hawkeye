@@ -9,10 +9,8 @@ for each grid step (`group_id_ref[i]` selects which one). Only that one (K, N) s
 is ever VMEM-resident at a time -- O(K*N) per step instead of naive_kernel.py's
 O(G*K*N).
 
-This is the real Pallas idiom for data-dependent block selection (used in JAX's own
-grouped-matmul kernels), and scales to large G the way the naive approach doesn't --
-the naive kernel's VMEM footprint grows with the number of candidates even though
-only one is used per step; this one's doesn't.
+The naive kernel's VMEM footprint grows with the number of candidates even though
+only one is used per step; this kernel's does not.
 """
 
 import os

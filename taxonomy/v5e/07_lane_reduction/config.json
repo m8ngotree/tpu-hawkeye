@@ -1,25 +1,21 @@
 {
   "cell_name": "lane_reduction",
-  "task_description": "Row-sum of a 128x128 bf16 array, comparing a per-lane Python accumulation loop (128 single-lane reads+adds) against one jnp.sum(axis=1) call.",
+  "task_description": "Row-sum of a 128x128 bf16 array: per-lane Python accumulation loop (128 single-lane reads and adds) versus one jnp.sum(axis=1).",
   "profiling": {
     "metrics": [
       {
         "name": "num_reduce_ops",
-        "description": "number of distinct reduction-related VMEM read/accumulate operations issued. Naive: N (one per column). Optimized: 1. Exact and verifiable from the code alone, same convention as 03_vectorized_vmem/config.json.",
+        "description": "Number of distinct reduction-related VMEM read/accumulate operations issued.",
         "direction": "lower_is_better",
         "expected_naive": 128,
         "expected_optimized": 1
       },
       {
         "name": "achieved_tflops_pct_of_peak_bf16",
-        "description": "secondary/confirmatory signal, same convention as other cells. This cell is bandwidth/overhead-bound, not compute-bound -- num_reduce_ops is the more direct signal.",
+        "description": "Achieved TFLOPS as a percentage of v5e peak bf16 TFLOPS (197.0). Secondary signal; this kernel is not compute-bound.",
         "direction": "higher_is_better"
       }
     ]
   },
-  "verified": {
-    "interpret_mode_correctness": true,
-    "real_tpu_profiling": false
-  },
-  "note": "This row also covers running/cumulative reductions (jnp.cumsum -- a value per position that accumulates everything up to that point, rather than one final value) -- see guide.md's 'Running (cumulative) reductions' section. Not a separate cell: same underlying principle (native op vs. manual loop), different JAX primitive (jnp.cumsum vs. jnp.sum)."
+  "notes": "Also applies to cumulative reductions (jnp.cumsum): use the vectorized primitive rather than a manual loop."
 }

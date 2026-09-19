@@ -1,56 +1,33 @@
 # Fused Epilogue
 
-## What this is
+## Overview
 
-Splitting a computation into separate kernels is the natural way to write it
-incrementally -- one kernel per logical op, matching how you'd write it in plain
-JAX. But every kernel boundary is an HBM round trip: the previous kernel's output
-has to be written to HBM, and the next kernel has to read it back, even if nothing
-outside the two kernels ever needed that intermediate value. For a "final op" like a
-bias-add + activation that immediately follows a matmul, that round trip is pure
-overhead -- the data was already sitting in VMEM right after the matmul finished.
+Every kernel boundary is an HBM round trip: a kernel's output is written to HBM and
+the next kernel reads it back, even if nothing else consumes that intermediate. For an
+op that immediately follows a matmul (bias add, activation), the intermediate was
+already resident in VMEM when the matmul finished, so the round trip is pure
+overhead. Chains of a matmul or convolution followed by elementwise or reduction ops
+benefit most from running as a single kernel.
 
-This is a common shape in fused-operator workloads generally -- a matmul or
-convolution followed by a chain of activation/normalization/pooling ops -- and
-whether that whole chain lands in one kernel or stays split across several is often
-the single biggest lever available.
+## Rule
 
-(This project deliberately keeps taxonomy cells free of references to specific
-benchmark tasks -- everything under `taxonomy/v5e/` is copied into the workspace of
-the agent being evaluated, so naming which exact benchmark tasks need a technique
-would leak eval-set-specific hints into that agent's own context.)
+If op B consumes only op A's full output, place both in the same kernel body rather
+than in two `pallas_call`s (or a `pallas_call` followed by a bare `jnp` op).
 
-## The rule
+`naive_kernel.py` runs `_matmul_kernel` and `_epilogue_kernel` as two
+`pallas_call`s, so the matmul result is written to and read from HBM between them.
+`optimized_kernel.py` computes the matmul and applies bias and ReLU in one
+`_fused_kernel`, before anything is written out. Each file's `__main__` block reports
+`num_pallas_calls` (2 versus 1).
 
-If op B always immediately follows op A on A's full output, with nothing else
-consuming A's output in between, put both in the same kernel body instead of two
-`pallas_call`s (or a `pallas_call` followed by a bare `jnp` op). Compare
-`naive_kernel.py` (`_matmul_kernel` then `_epilogue_kernel`, two separate
-`pallas_call`s, with `C` written to and read from HBM in between) against
-`optimized_kernel.py` (one `_fused_kernel` that computes the matmul and applies the
-bias+ReLU to the same VMEM-resident result before ever writing it out). Both files'
-`__main__` blocks report `num_pallas_calls` directly (2 vs. 1) -- an exact,
-code-level fact, not a hardware claim.
+## When fusion does not apply
 
-## When this doesn't apply
+Fusion only helps when the intermediate is dead outside the fused region. If the
+unfused value is needed elsewhere (a residual connection consumed later, an auxiliary
+output), it must be materialized and fusing it away is not possible.
 
-Fusing only pays off when the intermediate really is dead outside the fused region.
-If you need the pre-activation matmul output for something else too (a residual
-connection consumed elsewhere, a debugging hook, gradient computation in a training
-step), materializing it isn't waste -- it's a real dependency, and this cell doesn't
-apply.
+## Diagnosis
 
-## When to reach for this vs. a neighboring cell
-
-If `eval.py` reports correct output on a workload that's visibly a chain of ops
-(matmul + activation + norm, or conv + norm + residual), and the kernel file has more
-than one `pallas_call` where the intermediate isn't reused elsewhere, check this cell.
-If the issue is that the matmul itself is slow regardless of fusion, that's
-`01_mxu_feed`'s territory first -- fuse only once the core compute is already correct.
-
-## Status
-
-Correctness verified locally via `interpret=True` (CPU, no TPU) -- both variants
-match a plain `relu(A@B + bias)` reference within JAXBench's tolerance
-(atol=rtol=1e-2). `num_pallas_calls` is exact from the code. The actual HBM-traffic /
-wall-clock savings from fusion has **not** been measured on real v5e hardware yet.
+A kernel file with several `pallas_call`s (or `pallas_call`s interleaved with `jnp`
+ops) whose intermediates are not reused is a candidate. If the matmul itself is slow
+independent of fusion, address `01_mxu_feed` first.

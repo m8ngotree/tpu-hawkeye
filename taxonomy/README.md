@@ -23,13 +23,13 @@ agent will `ls`/`cat` to browse the taxonomy (see "How the agent finds a cell" b
 | # | Directory (`v5e/...`) | Hawkeye (GPU) row | What it demonstrates |
 |---|---|---|---|
 | 1 | `01_mxu_feed` | MMA Unit | A matmul that actually lowers to the systolic array (MXU) vs. falling back to VPU emulation -- operand dtype/shape requirements |
-| 2 | `02_vmem_tile_layout` | Shared Memory Layout | Block/tile shapes that avoid relayouts -- last two dims divisible by (8, 128), uniformly across dtypes per [Pallas's TPU docs](https://docs.jax.dev/en/latest/pallas/tpu/details.html) (corrected from an earlier, wrong claim that this was dtype-dependent) |
+| 2 | `02_vmem_tile_layout` | Shared Memory Layout | Block/tile shapes that avoid relayouts -- last two dims divisible by (8, 128), uniformly across dtypes per [Pallas's TPU docs](https://docs.jax.dev/en/latest/pallas/tpu/details.html) |
 | 3 | `03_vectorized_vmem` | Vectorized Memory | Lane-aligned loads so the VPU doesn't fall back to scalar-core ops |
 | 4 | `04_async_pipeline` | Async Pipeline | `pltpu.emit_pipeline` / `make_async_copy`, multi-stage buffering -- direct analogue of TMA/cp.async |
 | 5 | `05_producer_consumer` | Producer/Consumer | Multi-stage buffering depth (2-stage vs. 3+-stage prefetch) -- how far ahead the DMA "producer" can run of the compute "consumer," distinct from `04_async_pipeline`'s on/off overlap toggle |
 | 6 | `06_fused_epilogue` | Epilogue Pipeline | Fusing bias/activation/norm into the same kernel instead of separate ops (fewer HBM round trips) |
-| 7 | `07_lane_reduction` | Warp/Wave Reduction | Reductions that map to native cross-lane ops instead of naive loops -- **including prefix-scan/cumulative reductions** (e.g. RetNet/Mamba2's log-space `cumsum` decay mask), not just full reductions |
-| 8 | `08_grouped_matmul` | *(no direct Hawkeye row -- see provenance below)* | Matmuls whose group/segment boundaries are data-dependent: gather-by-index (paged KV cache), masked dynamic-slice per group (MoE expert routing), instead of one static-shape matmul |
+| 7 | `07_lane_reduction` | Warp/Wave Reduction | Reductions that map to native cross-lane ops instead of naive loops, including cumulative reductions (`jnp.cumsum`) |
+| 8 | `08_grouped_matmul` | *(no direct Hawkeye row -- see provenance below)* | Per-step operand selected by a runtime index array via scalar prefetch (`PrefetchScalarGridSpec`), instead of keeping every candidate VMEM-resident |
 
 ## Row provenance
 
@@ -118,25 +118,21 @@ Python/Pallas instead of CUDA:
   themselves (a buffering/phase protocol, a gotcha, when to reach for this vs. a
   neighboring row).
 
-**Hard rule for all four files, no exceptions: never name a specific JAXBench
-workload (its file/directory name, its exact CONFIG values, or the model it's
-labeled after -- e.g. "Llama-3.1-70B", "Mixtral-8x7B") inside any of them.**
-Everything under `taxonomy/v5e/<cell>/` gets copied verbatim into the workspace of
-the agent being *evaluated* against JAXBench (see `agent/workspace.py`) -- naming
-which exact benchmark tasks need a technique leaks evaluation-set-specific hints
-into that agent's own context, which would invalidate the taxonomy-vs-no-taxonomy
-comparison this whole project exists to run. General ML domain knowledge is fine
-("linear-attention architectures often use a cumsum-based decay mask"); a specific
-test file's name or hyperparameters are not, even as a passing example. This was
-violated in an earlier draft of several cells (specific workload names had leaked
-into `06_fused_epilogue`, `07_lane_reduction`, and `08_grouped_matmul`'s prose) and
-fixed after being caught -- if you're writing a new cell, check your draft against
-this rule before it's done, not after.
+**Content rules for all four files.** Everything under `taxonomy/v5e/<cell>/` is
+copied verbatim into the workspace of the agent being evaluated (see
+`agent/workspace.py`), so cell content must:
 
-This file (`taxonomy/README.md`) and everything else outside `taxonomy/v5e/` is
-the one place workload-specific reasoning belongs -- it's never copied into an
-agent's workspace, so it's safe for our own research notes (see "Row provenance"
-above, which does name specific workloads on purpose).
+- describe hardware and Pallas/Mosaic mechanics only (what the hardware does, what the
+  compiler recognizes, what the API requires), with generic examples built from
+  primitive operations such as elementwise ops, matmuls and reductions;
+- not name any benchmark task, workload, model, or neural-network architecture, and
+  not include project-internal commentary (revision history, corrections,
+  verification status);
+- read as formal reference documentation.
+
+Workload-specific reasoning (why a row exists, which tasks motivated it) belongs in
+this file, which sits outside `taxonomy/v5e/` and is never copied into an agent
+workspace (see "Row provenance" above).
 
 ## Why cells are separate from JAXBench workload kernels
 
@@ -151,10 +147,6 @@ the cross-workload reuse Hawkeye describes in Appendix E.3.1.
 
 ## Status
 
-**All 8 cells written and correctness-verified via `interpret=True` (CPU).** `08_grouped_matmul`
-additionally required verifying `pltpu.PrefetchScalarGridSpec`'s calling convention
-by direct experimentation (worked first try; not cross-checked against official
-Pallas docs -- see that cell's `guide.md`). **None of the 8 cells' actual throughput
-claims are verified on real v5e hardware yet** -- that's the next real gap, not more
-taxonomy content. See each cell's `guide.md` for what specifically needs a Kaggle TPU
-session to confirm.
+All 8 cells are written; each has been checked for numerical correctness against a
+reference under `interpret=True` on CPU. Throughput claims have not yet been measured
+on v5e hardware.

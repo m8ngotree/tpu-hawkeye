@@ -1,13 +1,9 @@
 """Taxonomy cell 02_vmem_tile_layout -- OPTIMIZED (expert) variant.
 
-Identical math and output shape to naive_kernel.py, only the block shape changes:
-(32, 128) instead of (4, 64). (32, 128) satisfies Pallas TPU's documented block-shape
-rule -- last two dimensions divisible by 8 and 128 respectively (32 is 4x8, 128 is
-1x128) -- so Mosaic can load/store each block without internal padding, and there
-are 16x fewer grid steps (16 vs. naive's 256) for the same total work.
-
-See guide.md for the (8, 128) tiling rule (and a correction: an earlier version of
-this cell wrongly claimed it was dtype-dependent -- it isn't, per Pallas's docs).
+Same math and output shape as naive_kernel.py; only the block shape changes, from
+(4, 64) to (32, 128). (32, 128) satisfies the Pallas TPU block-shape rule (last two
+dimensions divisible by 8 and 128), so no per-block padding is needed, and the grid
+has 16 steps instead of 256.
 """
 
 import os

@@ -1,18 +1,14 @@
 {
   "cell_name": "producer_consumer",
-  "task_description": "Elementwise y = x*scale+bias over a (1024, 128) bf16 array via pltpu.emit_pipeline, comparing input buffer_count=2 (double buffering, 1-block lookahead) against buffer_count=3 (triple buffering, 2-block lookahead).",
+  "task_description": "Elementwise y = x*scale + bias over a (1024, 128) bf16 array via pltpu.emit_pipeline: input buffer_count=2 versus buffer_count=3.",
   "profiling": {
     "metrics": [
       {
         "name": "dma_wait_fraction",
-        "description": "same metric as 04_async_pipeline -- fraction of kernel time spent waiting on DMA. This cell's naive/optimized delta only shows up when per-block DMA latency exceeds per-block compute time (otherwise 2 buffers are already enough to fully hide the transfer, and buffer_count=3 buys nothing). Needs a real profiler trace (agent/profiler.py, not yet implemented) to observe directly.",
+        "description": "Fraction of kernel time spent waiting on DMA. The difference between variants appears only when per-block DMA latency exceeds per-block compute time. Requires a profiler trace.",
         "direction": "lower_is_better"
       }
     ]
   },
-  "verified": {
-    "interpret_mode_correctness": true,
-    "real_tpu_profiling": false
-  },
-  "known_gotcha": "buffer_count > 2 is only supported for INPUT buffered refs in this jax/jaxlib version -- setting it on an output BlockSpec raises NotImplementedError('Buffer count >2 not supported for output buffered refs'). Found by trying it, not documented anywhere obvious."
+  "notes": "buffer_count > 2 is supported on input BlockSpecs only; on an output BlockSpec it raises NotImplementedError. pl.Buffered(..., use_lookahead=True) allows prefetching further ahead."
 }

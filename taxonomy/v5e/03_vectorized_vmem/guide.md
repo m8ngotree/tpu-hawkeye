@@ -1,51 +1,31 @@
 # Vectorized VMEM Load/Store
 
-## What this is
+## Overview
 
-The VPU (vector unit) operates on all 128 lanes of a VMEM row in one instruction.
-Code that accesses a Ref one lane (or one small slice) at a time -- a Python loop
-over the lane dimension, dynamic per-element indexing, anything that produces N
-separate small reads/writes instead of one wide one -- still produces correct output,
-but at a fraction of the achievable throughput, because the VPU's per-lane
-parallelism goes unused. Like `01_mxu_feed`, this is a silent failure mode: nothing
-errors, the kernel just runs far slower than the array size suggests it should.
+The VPU (vector unit) operates on all 128 lanes of a VMEM row in a single
+instruction. Code that accesses a Ref one lane, or one small slice, at a time (a
+Python loop over the lane dimension, per-element indexing) produces many narrow
+reads and writes instead of one wide one. The result is still correct, but per-lane
+parallelism goes unused and throughput drops.
 
-## The rule
+## Rule
 
-Write whole-block vector expressions (`ref[:, :] = ...`, or slices that span full
-lane-width chunks) instead of looping over individual lanes/elements in Python.
-Compare `naive_kernel.py` (`for j in range(N): o_ref[:, j] = ...` -- 128 single-lane
-statements) against `optimized_kernel.py` (`o_ref[:, :] = ...` -- one statement over
-the whole 128-lane block). Both files' `__main__` blocks report `num_vmem_ops`
-directly (128 vs. 1) -- this is a fact about the code, verifiable without a profiler
-or real hardware, unlike this cell's actual throughput delta (see Status).
+Write whole-block vector expressions (`ref[:, :] = ...`, or slices spanning full
+lane-width chunks) instead of looping over individual lanes or elements in Python.
 
-## How this differs from `02_vmem_tile_layout`
+`naive_kernel.py` issues `for j in range(N): o_ref[:, j] = ...`, 128 single-lane
+statements; `optimized_kernel.py` issues `o_ref[:, :] = ...`, one statement over the
+whole block. Each file's `__main__` block reports `num_vmem_ops` (128 versus 1).
 
-Easy to conflate these two -- they're both "VMEM access patterns," but at different
-granularities:
+## Relation to `02_vmem_tile_layout`
 
-- `02_vmem_tile_layout` is about how the **grid divides an array into blocks**
-  (BlockSpec shape vs. the hardware's tile size).
-- `03_vectorized_vmem` (this cell) is about how **one block's own code** reads/writes
-  it -- whole-vector vs. element-by-element, independent of how that block was sized.
+`02_vmem_tile_layout` concerns how the grid divides an array into blocks (BlockSpec
+shape versus hardware tile size). This cell concerns how the code inside one block
+reads and writes it: whole-vector versus element-by-element. The two are
+independent; a well-tiled block can still be processed with a scalar loop.
 
-A kernel can get one of these right and the other wrong: a perfectly-tiled block can
-still be processed with a scalar Python loop inside the kernel body, and vice versa.
+## Diagnosis
 
-## When to reach for this vs. a neighboring cell
-
-If `eval.py` reports correct output but throughput is low on something elementwise
-(no matmul involved), check whether the kernel body has any Python loop over an array
-dimension -- that's this cell's territory. If the slow part is a matmul specifically,
-that's `01_mxu_feed`. If it's a full-array reduction (sum/max/mean along an axis),
-that's `07_lane_reduction` instead -- reductions have their own vectorization
-concerns beyond plain elementwise ops.
-
-## Status
-
-Correctness verified locally via `interpret=True` (CPU, no TPU) -- both kernels match
-a plain elementwise reference within JAXBench's tolerance (atol=rtol=1e-2). The
-`num_vmem_ops` counts (128 vs. 1) are exact, code-level facts, not a hardware claim.
-The actual throughput delta this produces on real silicon has **not** been measured
-on v5e hardware yet -- needs a Kaggle TPU session with `interpret=False`.
+Low throughput on an elementwise kernel with no matmul: check the kernel body for
+Python loops over an array dimension. For matmul-shaped work see `01_mxu_feed`; for
+reductions along an axis see `07_lane_reduction`.

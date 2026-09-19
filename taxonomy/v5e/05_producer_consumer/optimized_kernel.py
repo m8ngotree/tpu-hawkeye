@@ -1,15 +1,12 @@
 """Taxonomy cell 05_producer_consumer -- OPTIMIZED (expert) variant.
 
-Identical body/grid to naive_kernel.py, with the input BlockSpec's
-`pipeline_mode=pl.Buffered(buffer_count=3)` instead of 2 -- triple buffering. The DMA
-"producer" can now have up to TWO blocks prefetched ahead of the compute "consumer,"
-giving the pipeline enough slack to absorb a block's DMA transfer taking longer than
-a block's compute, without stalling the whole pipeline on it.
+Body and grid identical to naive_kernel.py; the input BlockSpec uses
+`pipeline_mode=pl.Buffered(buffer_count=3)` instead of 2 (triple buffering). The DMA
+producer can run two blocks ahead of the compute consumer, absorbing a per-block
+transfer that takes longer than a block's compute.
 
-Note: as of this jax/jaxlib version, buffer_count > 2 is only supported for INPUT
-buffered refs, not output ones (`NotImplementedError: Buffer count >2 not supported
-for output buffered refs` -- found by trying it). That's why only `in_spec` here uses
-`pl.Buffered`; `out_spec` is left at its default in both variants.
+`buffer_count > 2` is supported on input buffered refs only, so `out_spec` is left at
+its default in both variants.
 """
 
 import os

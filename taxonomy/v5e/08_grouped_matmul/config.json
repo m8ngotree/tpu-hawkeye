@@ -1,25 +1,21 @@
 {
   "cell_name": "grouped_matmul",
-  "task_description": "Grouped matmul: 8 row-blocks of a (128, 64) input, each multiplied by one of 4 (64, 64) candidate weight matrices per a per-block group_id array -- data-dependent block selection via scalar prefetch, not tied to any specific benchmark task, model, or architecture.",
+  "task_description": "Grouped matmul: 8 row-blocks of a (128, 64) input, each multiplied by one of 4 (64, 64) weight matrices selected by a per-block group_id array. Whole weight tensor VMEM-resident versus scalar-prefetch-driven index_map.",
   "profiling": {
     "metrics": [
       {
         "name": "vmem_resident_weight_elems",
-        "description": "number of weight-tensor elements resident in VMEM per grid step. Naive: G*K*N (all candidate weight matrices, every step). Optimized: K*N (only the selected one, via scalar-prefetch-driven index_map). Exact and verifiable from the code/config alone -- this is what the technique actually buys, and it scales with G even though this cell uses a small G=4 to keep the example fast to verify.",
+        "description": "Weight-tensor elements resident in VMEM per grid step: G*K*N when every candidate is resident, K*N when only the selected slice is fetched via scalar prefetch. Scales with G.",
         "direction": "lower_is_better",
         "expected_naive": 16384,
         "expected_optimized": 4096
       },
       {
         "name": "achieved_tflops_pct_of_peak_bf16",
-        "description": "secondary/confirmatory signal, same convention as other cells. At this cell's small scale the VMEM-footprint story is the more direct one; the throughput gap should widen with larger G.",
+        "description": "Achieved TFLOPS as a percentage of v5e peak bf16 TFLOPS (197.0). Secondary signal.",
         "direction": "higher_is_better"
       }
     ]
   },
-  "verified": {
-    "interpret_mode_correctness": true,
-    "real_tpu_profiling": false
-  },
-  "note": "Row added after reading all 50 JAXBench workloads (not one of Hawkeye's original 10 GPU rows) -- see taxonomy/README.md's 'Row provenance' section for why. optimized_kernel.py uses pltpu.PrefetchScalarGridSpec; its calling convention was first verified by direct experimentation against this jax/jaxlib version, then cross-checked against the official 'Scalar Prefetch and Block-Sparse Computation' guide (https://docs.jax.dev/en/latest/pallas/tpu/sparse.html), which confirms it exactly: kernel body receives prefetch refs before input refs before output refs before scratch refs; each index_map receives grid indices before prefetch refs."
+  "notes": "Uses pltpu.PrefetchScalarGridSpec; see guide.md for the argument ordering convention."
 }

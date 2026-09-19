@@ -33,8 +33,7 @@ CONFIG = {
     "bias": 0.5,
 }
 
-# See 04_async_pipeline/guide.md -- emit_pipeline queries real TPU tiling info even
-# under interpret=True and fails on a non-TPU host without this.
+# Names the target TPU generation so emit_pipeline works on a host without a TPU.
 _ABSTRACT_TPU_V5E = jax.sharding.AbstractMesh(
     (),
     (),

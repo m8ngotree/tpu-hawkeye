@@ -1,21 +1,16 @@
 """Taxonomy cell 04_async_pipeline -- NAIVE variant.
 
-Processes a (512, 128) bf16 array in 4 row-blocks via `pltpu.emit_pipeline`, with
-`no_pipelining=True`: each block's HBM->VMEM copy-in, compute, and VMEM->HBM
-copy-out happen fully synchronously, one block at a time, with no overlap between a
-block's DMA wait and the previous/next block's compute.
+Processes a (512, 128) bf16 array in 4 row-blocks via `pltpu.emit_pipeline` with
+`no_pipelining=True`: each block's HBM->VMEM copy-in, compute, and VMEM->HBM copy-out
+run synchronously, one block at a time, with no overlap between a block's DMA and the
+compute of adjacent blocks.
 
-Identical body/grid/specs to optimized_kernel.py -- the ONLY difference is the
-`no_pipelining` flag. This is the real distinction the cell demonstrates: Pallas's
-`emit_pipeline` can automatically double-buffer HBM<->VMEM transfers so that block
-i+1's copy-in overlaps with block i's compute, or run fully synchronously with no
-overlap at all -- same code, one flag.
+Body, grid and BlockSpecs are identical to optimized_kernel.py; only the
+`no_pipelining` flag differs.
 
-Note on running this locally (no TPU): `emit_pipeline` queries real TPU tiling info
-even under `interpret=True`, which fails outside a TPU device unless you wrap the
-call in `jax.sharding.use_abstract_mesh` with an `AbstractDevice` naming a TPU
-generation -- see `workload()` below. Undocumented anywhere obvious; found by hitting
-the error and reading jax/_src/tpu_info.py's message.
+When run without a TPU device, `emit_pipeline` requires the `pallas_call` to be
+wrapped in `jax.sharding.use_abstract_mesh` with an `AbstractDevice` naming a TPU
+generation (see `workload()` and guide.md).
 """
 
 import os
@@ -34,8 +29,7 @@ CONFIG = {
     "bias": 0.5,
 }
 
-# Lets emit_pipeline's tiling logic run under interpret=True on a non-TPU host --
-# without this, it queries the real device and raises even in interpret mode.
+# Names the target TPU generation so emit_pipeline works on a host without a TPU.
 _ABSTRACT_TPU_V5E = jax.sharding.AbstractMesh(
     (),
     (),

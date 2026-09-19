@@ -1,18 +1,14 @@
 {
   "cell_name": "async_pipeline",
-  "task_description": "Elementwise y = x*scale+bias over a (512, 128) bf16 array, processed in 4 row-blocks via pltpu.emit_pipeline, comparing no_pipelining=True (fully synchronous copy/compute/copy per block) against the default no_pipelining=False (automatic double-buffered overlap).",
+  "task_description": "Elementwise y = x*scale + bias over a (512, 128) bf16 array in 4 row-blocks via pltpu.emit_pipeline: no_pipelining=True versus the default no_pipelining=False.",
   "profiling": {
     "metrics": [
       {
         "name": "dma_wait_fraction",
-        "description": "fraction of total kernel time spent waiting on HBM<->VMEM DMA rather than computing. This is the metric that actually distinguishes naive from optimized here -- unlike 02_vmem_tile_layout/03_vectorized_vmem, there is no exact code-level fact (like a grid-step count) that proves the difference; it's a genuine runtime overlap behavior. Requires a real profiler trace to observe (agent/profiler.py, not yet implemented) -- eval.py's current TFLOPS/median_ms numbers are a weaker proxy (a real overlap benefit should show up as lower median_ms for the same total data movement).",
+        "description": "Fraction of kernel time spent waiting on HBM<->VMEM DMA rather than computing. Requires a profiler trace; median kernel time for a fixed data volume is a coarser proxy.",
         "direction": "lower_is_better"
       }
     ]
   },
-  "verified": {
-    "interpret_mode_correctness": true,
-    "real_tpu_profiling": false
-  },
-  "known_gotcha": "emit_pipeline queries real TPU tiling info even under interpret=True and raises on a non-TPU host unless wrapped in jax.sharding.use_abstract_mesh with an AbstractDevice naming a TPU generation (see naive_kernel.py's _ABSTRACT_TPU_V5E). Undocumented in the obvious places; found by hitting the error and reading jax/_src/tpu_info.py."
+  "notes": "emit_pipeline queries TPU device information even under interpret=True; on a host without a TPU, wrap the pallas_call in jax.sharding.use_abstract_mesh with an AbstractDevice naming the TPU generation (see guide.md)."
 }
