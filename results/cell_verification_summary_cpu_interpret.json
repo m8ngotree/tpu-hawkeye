@@ -1,0 +1,94 @@
+{
+  "devices": "[CpuDevice(id=0)]",
+  "interpret": true,
+  "cells": {
+    "01_mxu_feed": {
+      "naive": {
+        "status": "ok",
+        "median_ms": 0.061208964325487614
+      },
+      "optimized": {
+        "status": "ok",
+        "median_ms": 0.0658340286463499
+      },
+      "outputs_match": true
+    },
+    "02_vmem_tile_layout": {
+      "naive": {
+        "status": "ok",
+        "median_ms": 3.374166088178754
+      },
+      "optimized": {
+        "status": "ok",
+        "median_ms": 0.4760000156238675
+      },
+      "outputs_match": true
+    },
+    "03_vectorized_vmem": {
+      "naive": {
+        "status": "ok",
+        "median_ms": 1.2251249281689525
+      },
+      "optimized": {
+        "status": "ok",
+        "median_ms": 0.028916983865201473
+      },
+      "outputs_match": true
+    },
+    "04_async_pipeline": {
+      "naive": {
+        "status": "ok",
+        "median_ms": 0.2115410752594471
+      },
+      "optimized": {
+        "status": "ok",
+        "median_ms": 0.14283403288573027
+      },
+      "outputs_match": true
+    },
+    "05_producer_consumer": {
+      "naive": {
+        "status": "ok",
+        "median_ms": 0.21416693925857544
+      },
+      "optimized": {
+        "status": "ok",
+        "median_ms": 0.22108398843556643
+      },
+      "outputs_match": true
+    },
+    "06_fused_epilogue": {
+      "naive": {
+        "status": "ok",
+        "median_ms": 0.09083305485546589
+      },
+      "optimized": {
+        "status": "ok",
+        "median_ms": 0.09108299855142832
+      },
+      "outputs_match": true
+    },
+    "07_lane_reduction": {
+      "naive": {
+        "status": "ok",
+        "median_ms": 0.036125071346759796
+      },
+      "optimized": {
+        "status": "ok",
+        "median_ms": 0.044792075641453266
+      },
+      "outputs_match": true
+    },
+    "08_grouped_matmul": {
+      "naive": {
+        "status": "ok",
+        "median_ms": 0.06954197306185961
+      },
+      "optimized": {
+        "status": "ok",
+        "median_ms": 0.07837498560547829
+      },
+      "outputs_match": true
+    }
+  }
+}

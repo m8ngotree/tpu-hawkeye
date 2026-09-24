@@ -15,6 +15,7 @@ from string import Template
 REPO_ROOT = Path(__file__).parent.parent
 TAXONOMY_ROOT = REPO_ROOT / "taxonomy"
 EVAL_PY = REPO_ROOT / "eval" / "eval.py"
+JAXBENCH_BENCHMARKS = REPO_ROOT / "external" / "accelerator-agents" / "JAXBench" / "benchmark"
 KERNEL_POOL_ROOT = REPO_ROOT / "results" / "kernel_pool"
 
 TASK_PROMPT_TEMPLATE = Template(
@@ -24,7 +25,9 @@ TASK_PROMPT_TEMPLATE = Template(
 Score = TFLOPS / baseline_tflops (higher is better). Must pass correctness first.
 
 ## Workspace
-- `kernel.py` -- edit this. Must define `workload(*inputs)` (plain JAX or Pallas).
+- `baseline.py` -- the reference implementation: `create_inputs()` builds the inputs and
+  `workload(*inputs)` is the math. Your kernel must produce the same output for the same inputs.
+- `kernel.py` -- edit this. Must define `workload(*inputs)` taking the same inputs (plain JAX or Pallas).
 - `eval.py` -- run `python eval.py --workload $workload_name --kernel kernel.py --tpu $generation`
   (add `--interpret` to check correctness on CPU with no TPU hours spent; drop it for
   real timing on TPU). Prints a JSON result and exits 0 iff correct.
@@ -75,7 +78,13 @@ def build_workspace(
     """
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    shutil.copy(EVAL_PY, out_dir / "eval.py")
+    eval_src = EVAL_PY.read_text().replace(
+        "sys.path.insert(0, str(Path(__file__).resolve().parent.parent))",
+        f"sys.path.insert(0, {str(REPO_ROOT)!r})",
+    )
+    (out_dir / "eval.py").write_text(eval_src)
+
+    shutil.copy(JAXBENCH_BENCHMARKS / workload_name / "baseline.py", out_dir / "baseline.py")
 
     (out_dir / "kernel.py").write_text(
         starting_kernel or "def workload(*inputs):\n    raise NotImplementedError\n"
