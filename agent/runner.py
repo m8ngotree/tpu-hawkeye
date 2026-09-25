@@ -55,8 +55,8 @@ def run_kernel(
     tpu='v5e' only sets which peak-TFLOPS number JAXBench normalizes against when
     reporting utilization_pct -- it does not need to match the real backend. On a CPU
     those utilization/TFLOPS numbers are meaningless; only status/correct/timing
-    matter for a plumbing smoke test. Pass tpu='v5e' for real Kaggle runs too, since
-    that's the only hardware this project targets right now.
+    matter for a plumbing smoke test. Pass tpu='v5e' on a real v5e too (JAXBench's 'auto'
+    detection does not recognize the 'TPU v5 lite' device kind).
 
     num_warmup/num_iters default low (2/5) because this function is meant to also work
     on CPU / interpret mode where each iteration is much slower than on real TPU;

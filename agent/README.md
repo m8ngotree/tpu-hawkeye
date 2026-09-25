@@ -12,9 +12,7 @@ to pre-decide what it should conclude.
 
 An earlier version of this project picked OpenHands (matching the paper's own
 harness, Appendix G.1). Reconsidered: OpenHands' default sandbox needs Docker, and
-Kaggle notebooks run without Docker/privileged access. OpenHands does have a
-Docker-less "local runtime," but it's the less-documented path, and OpenHands'
-headless-mode docs already had real gaps (workspace dir, max-iterations, JSON event
+its headless-mode docs had real gaps (workspace dir, max-iterations, JSON event
 schema) when checked. Given the goal here -- taxonomy vs. no-taxonomy, same harness
 held constant across both -- doesn't require matching the paper's exact framework,
 just holding *our* harness constant, a small hand-rolled loop is a better fit: no
@@ -23,7 +21,7 @@ Docker dependency, no framework internals to debug, fully readable in one sittin
 **Tradeoff to know about:** `agent/tools_exec.py`'s `run_bash` is not sandboxed
 beyond staying inside the workspace directory (no seccomp, no container, no resource
 limits) -- see that module's docstring. This relies on the *outer* environment (a
-disposable Kaggle kernel, a scratch GCP VM) being the actual safety boundary. Don't
+disposable cloud VM being the actual safety boundary. Don't
 run this against a machine you care about.
 
 **Model-agnostic via any OpenAI-compatible chat-completions API** -- DeepSeek's API

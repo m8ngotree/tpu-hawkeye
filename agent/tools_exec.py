@@ -5,8 +5,7 @@ read/write/execute anything outside the directory agent/workspace.py built for i
 This deliberately does NOT sandbox `run_bash` beyond that path clamp (no seccomp, no
 container, no resource limits). That's a real tradeoff of the hand-rolled-loop choice
 over a framework like OpenHands: you get simplicity and zero Docker dependency, but
-you're relying on the *outer* environment (a disposable Kaggle kernel, a scratch GCP
-VM) being the actual sandbox, not this code. Don't run this against a machine you
+you're relying on the *outer* environment (a disposable cloud VM) being the actual sandbox, not this code. Don't run this against a machine you
 care about.
 """
 

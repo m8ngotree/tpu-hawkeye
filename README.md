@@ -10,12 +10,11 @@ speedup that taxonomy buys over the same agent without it, on
 
 Two separate things write code here:
 
-1. **The taxonomy** -- 10 small, generic, hand-written unit-test cells (one per
-   recurring optimization technique: MXU feed, DMA pipelining, quantization, etc.),
+1. **The taxonomy** -- 8 small, generic, hand-written unit-test cells (one per
+   recurring optimization technique: MXU feed, DMA pipelining, fused epilogue, etc.),
    per TPU generation. We write these. See [taxonomy/README.md](taxonomy/README.md).
 2. **The coding agent** -- a small hand-rolled tool-use loop (not the paper's own
-   OpenHands harness -- see [agent/README.md](agent/README.md) for why: OpenHands
-   needs Docker, Kaggle notebooks don't have it), model-agnostic via any
+   OpenHands harness -- see [agent/README.md](agent/README.md) for why), model-agnostic via any
    OpenAI-compatible API (DeepSeek by default, for cost). Given a generated workspace
    (task prompt, `eval.py`, optionally `taxonomy/` + `kernel_pool/`) it autonomously
    writes and iterates on kernels for JAXBench's 50 real workloads, in its own
@@ -28,13 +27,12 @@ The speedup delta is the result.
 
 ## Compute plan
 
-- **Now**: Kaggle TPU v5e-8 (free, 20 hrs/week). Taxonomy cells and kernel-plumbing
-  are built and validated here first. Local development uses Pallas's
-  `interpret=True` CPU mode so TPU hours go to real profiling/eval runs, not
-  debugging syntax errors.
-- **Later**: GCP TPU VMs for v5p / v6e (Trillium) / v7 (Ironwood), per
-  [Cloud TPU pricing](https://cloud.google.com/tpu/pricing) -- compute isn't the
-  constraint long-term. Each new generation is a new sibling directory under
+- **Development**: a laptop, using Pallas's `interpret=True` CPU mode, so TPU time
+  goes to real profiling and eval runs rather than debugging syntax errors.
+- **Experiments**: a rented Cloud TPU VM on Google Cloud (a single v5e chip is enough:
+  every JAXBench workload runs on one device). Step-by-step commands are in
+  [docs/running_on_tpu.md](docs/running_on_tpu.md).
+- **Later generations** (v5p, v6e, ...): each is a new sibling directory under
   `taxonomy/` (`v5p/`, `v6e/`, ...) with the same row names, matching how Hawkeye
   adds a GPU architecture as one new column.
 
@@ -58,7 +56,7 @@ agent/
   tools.py                       our-side helpers: read_taxonomy_cell, kernel_pool_read/write -- done
 
 eval/
-  run_agent_eval.py            sweep the harness over JAXBench workloads, taxonomy vs. no-taxonomy -- stub
+  run_agent_eval.py            run the agent per workload and condition (taxonomy / none), re-score the final kernel
   eval.py                       CLI the agent runs: `python eval.py --workload X --kernel kernel.py` -- done, verified
   smoke_test.py + smoke_kernels/  plumbing check for runner.py (no TPU needed) -- passing
 
@@ -66,7 +64,7 @@ external/
   accelerator-agents/          submodule (sparse-checked to JAXBench/) -- github.com/m8ngotree/accelerator-agents
 
 docs/papers/                  reference papers (Hawkeye PDF)
-notebooks/                    Kaggle-runnable notebooks (bundle deps; Kaggle sessions are ephemeral)
+scripts/                      verify_cells.py (run every cell on the current backend), tpu_vm_setup.sh
 results/                      run outputs + kernel_pool/ (gitignored except summaries)
 ```
 
@@ -75,7 +73,6 @@ results/                      run outputs + kernel_pool/ (gitignored except summ
 `runner.py`, `eval.py`, `tools_exec.py`, and `workspace.py` are implemented and
 verified end-to-end on CPU. `harness.py` is implemented but not yet exercised against
 a real LLM API call. **All 8 taxonomy cells are written and correctness-verified**
-(CPU/interpret mode only -- none verified on real TPU hardware yet). Next real chunk
-of work: smoke-test `harness.py` against one cheap agent turn, then a Kaggle TPU
-session to verify the taxonomy cells' actual throughput claims, before running a full
-eval sweep.
+(CPU/interpret mode only -- none verified on real TPU hardware yet). Next: rent a TPU
+VM ([docs/running_on_tpu.md](docs/running_on_tpu.md)), verify the cells on hardware,
+smoke-test the agent loop, run a pilot, then the full sweep.

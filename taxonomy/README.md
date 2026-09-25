@@ -23,7 +23,7 @@ agent will `ls`/`cat` to browse the taxonomy (see "How the agent finds a cell" b
 | # | Directory (`v5e/...`) | Hawkeye (GPU) row | What it demonstrates |
 |---|---|---|---|
 | 1 | `01_mxu_feed` | MMA Unit | A matmul that actually lowers to the systolic array (MXU) vs. falling back to VPU emulation -- operand dtype/shape requirements |
-| 2 | `02_vmem_tile_layout` | Shared Memory Layout | Block/tile shapes that avoid relayouts -- last two dims divisible by (8, 128), uniformly across dtypes per [Pallas's TPU docs](https://docs.jax.dev/en/latest/pallas/tpu/details.html) |
+| 2 | `02_vmem_tile_layout` | Shared Memory Layout | Block/tile shapes that avoid relayouts -- last two dims divisible by (8, 128), uniformly across dtypes |
 | 3 | `03_vectorized_vmem` | Vectorized Memory | Lane-aligned loads so the VPU doesn't fall back to scalar-core ops |
 | 4 | `04_async_pipeline` | Async Pipeline | `pltpu.emit_pipeline` / `make_async_copy`, multi-stage buffering -- direct analogue of TMA/cp.async |
 | 5 | `05_producer_consumer` | Producer/Consumer | Multi-stage buffering depth (2-stage vs. 3+-stage prefetch) -- how far ahead the DMA "producer" can run of the compute "consumer," distinct from `04_async_pipeline`'s on/off overlap toggle |

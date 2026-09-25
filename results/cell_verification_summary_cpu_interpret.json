@@ -5,88 +5,88 @@
     "01_mxu_feed": {
       "naive": {
         "status": "ok",
-        "median_ms": 0.061208964325487614
+        "median_ms": 0.05920801777392626
       },
       "optimized": {
         "status": "ok",
-        "median_ms": 0.0658340286463499
+        "median_ms": 0.07337506394833326
       },
       "outputs_match": true
     },
     "02_vmem_tile_layout": {
       "naive": {
         "status": "ok",
-        "median_ms": 3.374166088178754
+        "median_ms": 3.1587498961016536
       },
       "optimized": {
         "status": "ok",
-        "median_ms": 0.4760000156238675
+        "median_ms": 0.47558301594108343
       },
       "outputs_match": true
     },
     "03_vectorized_vmem": {
       "naive": {
         "status": "ok",
-        "median_ms": 1.2251249281689525
+        "median_ms": 1.205500098876655
       },
       "optimized": {
         "status": "ok",
-        "median_ms": 0.028916983865201473
+        "median_ms": 0.042750034481287
       },
       "outputs_match": true
     },
     "04_async_pipeline": {
       "naive": {
         "status": "ok",
-        "median_ms": 0.2115410752594471
+        "median_ms": 0.13683398719877005
       },
       "optimized": {
         "status": "ok",
-        "median_ms": 0.14283403288573027
+        "median_ms": 0.1687499461695552
       },
       "outputs_match": true
     },
     "05_producer_consumer": {
       "naive": {
         "status": "ok",
-        "median_ms": 0.21416693925857544
+        "median_ms": 0.21249998826533556
       },
       "optimized": {
         "status": "ok",
-        "median_ms": 0.22108398843556643
+        "median_ms": 0.2692500129342079
       },
       "outputs_match": true
     },
     "06_fused_epilogue": {
       "naive": {
         "status": "ok",
-        "median_ms": 0.09083305485546589
+        "median_ms": 0.09945803321897984
       },
       "optimized": {
         "status": "ok",
-        "median_ms": 0.09108299855142832
+        "median_ms": 0.08950009942054749
       },
       "outputs_match": true
     },
     "07_lane_reduction": {
       "naive": {
         "status": "ok",
-        "median_ms": 0.036125071346759796
+        "median_ms": 0.03195903263986111
       },
       "optimized": {
         "status": "ok",
-        "median_ms": 0.044792075641453266
+        "median_ms": 0.0061659375205636024
       },
       "outputs_match": true
     },
     "08_grouped_matmul": {
       "naive": {
         "status": "ok",
-        "median_ms": 0.06954197306185961
+        "median_ms": 0.06874999962747097
       },
       "optimized": {
         "status": "ok",
-        "median_ms": 0.07837498560547829
+        "median_ms": 0.07912504952400923
       },
       "outputs_match": true
     }

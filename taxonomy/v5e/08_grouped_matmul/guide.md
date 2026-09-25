@@ -62,5 +62,3 @@ of several tensors to fetch".
 Use this cell when a per-step operand is selected by an index computed earlier rather
 than by a fixed offset. Correct MXU usage (`01_mxu_feed`) does not help if the weight
 side carries `G` times the necessary VMEM traffic.
-
-Reference: https://docs.jax.dev/en/latest/pallas/tpu/sparse.html

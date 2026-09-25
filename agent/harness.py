@@ -1,11 +1,9 @@
 """Minimal hand-rolled tool-use loop driving the agent -- replaces an earlier
-OpenHands-based harness (its Docker-based sandbox doesn't fit Kaggle notebooks, which
-run without Docker/privileged access, and its headless-mode docs had real gaps around
-exactly what this project needs: workspace dir, max-iterations, event schema).
+OpenHands-based harness (its headless-mode docs had real gaps around exactly what
+this project needs: workspace dir, max-iterations, event schema).
 
 This trades OpenHands' polish for something small enough to fully read and debug,
-with zero Docker dependency -- it runs wherever Python runs, including inside a
-Kaggle kernel.
+with zero Docker dependency -- it runs wherever Python runs.
 
 Model-agnostic via any OpenAI-compatible chat-completions API (DeepSeek, OpenAI,
 local vLLM/Ollama, ...) -- set model/base_url/api_key_env accordingly. DeepSeek's API
@@ -13,7 +11,7 @@ is OpenAI-SDK compatible: base_url="https://api.deepseek.com", model="deepseek-c
 
 SAFETY NOTE: agent/tools_exec.py's run_bash is not sandboxed beyond staying inside the
 workspace directory (see that module's docstring). Run this inside a disposable
-environment (a Kaggle kernel, a scratch VM) -- not on a machine you care about.
+environment (a scratch cloud VM) -- not on a machine you care about.
 """
 
 import json

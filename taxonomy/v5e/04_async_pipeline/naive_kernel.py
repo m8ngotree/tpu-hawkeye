@@ -13,6 +13,7 @@ wrapped in `jax.sharding.use_abstract_mesh` with an `AbstractDevice` naming a TP
 generation (see `workload()` and guide.md).
 """
 
+import contextlib
 import os
 
 import jax
@@ -61,7 +62,12 @@ def _outer_kernel(x_hbm_ref, o_hbm_ref):
 def workload(X):
     interpret = os.environ.get("PALLAS_INTERPRET") == "1"
     M, N = CONFIG["M"], CONFIG["N"]
-    with jax.sharding.use_abstract_mesh(_ABSTRACT_TPU_V5E):
+    mesh_ctx = (
+        contextlib.nullcontext()
+        if jax.default_backend() == "tpu"
+        else jax.sharding.use_abstract_mesh(_ABSTRACT_TPU_V5E)
+    )
+    with mesh_ctx:
         return pl.pallas_call(
             _outer_kernel,
             in_specs=[pl.BlockSpec(memory_space=pl.ANY)],

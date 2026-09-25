@@ -8,6 +8,9 @@ Every other setting is identical between conditions. The final kernel is re-scor
 independently of anything the agent reported: JAXBench correctness check plus timing
 against the JAXBench baseline.
 
+Runs that already have a result.json are skipped (--force to redo), so a crashed or
+preempted sweep can simply be re-run.
+
 Requires LLM_API_KEY. --interpret scores on CPU (correctness only); omit it on a TPU.
 """
 
@@ -29,6 +32,9 @@ from agent.workspace import build_workspace
 def run_one(workload, condition, rep, args):
     run_dir = ROOT / "results" / "runs" / args.tag / condition / f"{workload}_r{rep}"
     record = {"workload": workload, "condition": condition, "rep": rep, "tag": args.tag}
+    result_path = run_dir / "result.json"
+    if result_path.exists() and not args.force:
+        return json.loads(result_path.read_text())
     t0 = time.time()
     try:
         ws = build_workspace(
@@ -75,6 +81,7 @@ def main():
     ap.add_argument("--interpret", action="store_true")
     ap.add_argument("--dry-run", action="store_true", help="skip the agent; score the empty starting kernel")
     ap.add_argument("--tag", default="run")
+    ap.add_argument("--force", action="store_true", help="redo runs that already have a result.json")
     args = ap.parse_args()
 
     records = []
