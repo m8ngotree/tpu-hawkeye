@@ -99,6 +99,72 @@ def _diagnosis(result: dict, workload: str, tpu: str) -> dict | None:
     return diag
 
 
+_MATMUL_PRIMITIVES = {"dot_general", "conv_general_dilated"}
+
+
+def _subjaxprs(eqn):
+    for value in eqn.params.values():
+        for item in (value if isinstance(value, (list, tuple)) else [value]):
+            inner = getattr(item, "jaxpr", item)
+            if hasattr(inner, "eqns"):
+                yield inner
+
+
+def _has_pallas(eqn) -> bool:
+    return eqn.primitive.name == "pallas_call" or any(
+        _has_pallas(e) for sub in _subjaxprs(eqn) for e in sub.eqns)
+
+
+def _outside_primitives(jaxpr, counts):
+    """Count primitives that run outside any pallas_call."""
+    for eqn in jaxpr.eqns:
+        if eqn.primitive.name == "pallas_call":
+            continue
+        subs = list(_subjaxprs(eqn))
+        if not subs:
+            counts[eqn.primitive.name] = counts.get(eqn.primitive.name, 0) + 1
+        for sub in subs:
+            _outside_primitives(sub, counts)
+
+
+def _pallas_audit(kernel_path: Path, workload: str) -> dict | None:
+    """Trace the kernel's workload() into a JAX program (no execution) and check that the work is
+    done by Pallas: at least one pallas_call, the output depends on one, and no matmul or
+    convolution runs outside Pallas. Returns None if the kernel cannot be traced abstractly."""
+    try:
+        import jax
+        import jax.numpy as jnp
+        import JAXBench
+        from JAXBench.harness.loader import load_module
+
+        base_path = Path(JAXBench.__file__).parent / "benchmark" / workload / "baseline.py"
+        base = load_module(str(base_path), f"{workload}.audit_base")
+        create = base.create_inputs
+        specs = jax.eval_shape(lambda: create(dtype=jnp.bfloat16) if "dtype" in create.__code__.co_varnames else create())
+        specs = specs if isinstance(specs, (list, tuple)) else (specs,)
+        kernel = load_module(str(kernel_path), "audit_kernel")
+        closed = jax.make_jaxpr(kernel.workload)(*specs)
+    except Exception:  # noqa: BLE001 - an untraceable kernel is judged by the evaluation itself
+        return None
+
+    jaxpr = closed.jaxpr
+    tainted = set()
+    calls = 0
+    for eqn in jaxpr.eqns:
+        has = _has_pallas(eqn)
+        calls += has
+        if has or any(v in tainted for v in eqn.invars if not hasattr(v, "val")):
+            tainted.update(eqn.outvars)
+    counts: dict = {}
+    _outside_primitives(jaxpr, counts)
+    return {
+        "pallas_calls": calls,
+        "output_uses_pallas": any(v in tainted for v in jaxpr.outvars if not hasattr(v, "val")),
+        "matmul_outside_pallas": sum(counts.get(name, 0) for name in _MATMUL_PRIMITIVES),
+        "outside_primitives": dict(sorted(counts.items(), key=lambda kv: -kv[1])[:12]),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workload", required=True, help="JAXBench workload name, e.g. 12p_RMSNorm")
@@ -115,6 +181,16 @@ def main() -> None:
         problem = "kernel must implement its main computation with pl.pallas_call; plain JAX is not accepted"
     elif re.search(r"pallas[./]ops|pallas\s+import\s+ops", source):
         problem = "kernel must not use the ready-made kernels in jax.experimental.pallas.ops"
+    audit = None
+    if not problem:
+        audit = _pallas_audit(args.kernel, args.workload)
+        if audit is not None:
+            if audit["pallas_calls"] == 0:
+                problem = "the kernel's program contains no pallas_call"
+            elif not audit["output_uses_pallas"]:
+                problem = "the kernel's output does not depend on any pallas_call"
+            elif audit["matmul_outside_pallas"]:
+                problem = "matmuls and convolutions must run inside the Pallas kernel, not outside it"
     if problem:
         result = {"workload": args.workload, "status": "rejected", "error": problem}
         if (HERE / "JAXBench").exists():
@@ -132,6 +208,8 @@ def main() -> None:
         num_warmup=args.num_warmup,
         num_iters=args.num_iters,
     )
+    if audit is not None:
+        result["pallas_check"] = audit
     if result.get("status") == "correct":
         diagnosis = _diagnosis(result, args.workload, args.tpu)
         if diagnosis:

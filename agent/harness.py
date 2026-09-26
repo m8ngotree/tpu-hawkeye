@@ -279,6 +279,7 @@ def run_agent(
                     diag = parsed.get("diagnosis") or {}
                     entry["pct_of_roofline_limit"] = diag.get("pct_of_roofline_limit")
                     entry["workload_limit"] = diag.get("workload_limit")
+                    entry["pallas_check"] = parsed.get("pallas_check")
                     entry["error"] = str(parsed.get("error") or "")[:300] or None
                     eval_history.append(entry)
 

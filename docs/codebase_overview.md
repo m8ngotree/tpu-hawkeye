@@ -332,9 +332,13 @@ workspace it uses the workspace's private JAXBench copy. It calls `evaluate_kern
 ### 7.2 Best-kernel tracking
 
 After each evaluation inside a workspace, `eval.py` appends a line to `eval_log.jsonl`
-(status, speedup, and `is_reference`). `eval.py` rejects any kernel that does not contain
-`pl.pallas_call` (status `rejected`; a static text check, so it is a guard against plain-JAX
-rewrites, not a proof). If a Pallas kernel is correct and the fastest so far, it is saved as
+(status, speedup, and `is_reference`). `eval.py` rejects a kernel (status `rejected`) unless a
+text check finds `pl.pallas_call` and a program-level audit passes: the kernel's `workload` is
+traced abstractly (no execution) and must contain a `pallas_call`, its output must depend on one
+(so an unused dummy call fails), and no matmul or convolution may run outside Pallas. The audit
+is recorded as `pallas_check` (including the primitives that run outside Pallas). It does not
+catch a Pallas call that only copies data with the real computation done in other elementwise
+JAX code; `outside_primitives` in `eval_history` makes that visible for review. If a Pallas kernel is correct and the fastest so far, it is saved as
 `best_kernel.py` with `best_score.json`. So a failed later experiment never loses earlier
 progress, and the score is "best correct Pallas kernel the agent ever evaluated", as in the paper.
 
@@ -410,6 +414,7 @@ independently. Also report how often a correct kernel was produced at all, and c
 - Taxonomy content rules (no benchmark leakage).
 
 **Known limitations.**
+- A kernel that passes the audit could still do its non-matmul work outside Pallas; review `outside_primitives`.
 - Without a shell, the guard is mostly moot, but the agent's own `kernel.py` executes during evaluation, so the environment is not a true sandbox; run on a disposable VM.
 - Each `baseline.py` includes a `CONFIG` dict that can name the source model (for example a
   named LLM's operator dimensions). The agent can read it in both conditions; it does not
