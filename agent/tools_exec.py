@@ -40,7 +40,7 @@ def read_file(workspace: Path, path: str) -> ToolResult:
         target = _resolve(workspace, path)
         if not target.exists():
             return ToolResult(ok=False, output=f"no such file: {path}")
-        return ToolResult(ok=True, output=target.read_text())
+        return ToolResult(ok=True, output=target.read_text(errors="replace"))
     except WorkspaceEscapeError as e:
         return ToolResult(ok=False, output=str(e))
 
@@ -95,6 +95,8 @@ def run_bash(workspace: Path, command: str, timeout_s: int = 300) -> ToolResult:
             cwd=workspace,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout_s,
         )
         output = proc.stdout + proc.stderr
