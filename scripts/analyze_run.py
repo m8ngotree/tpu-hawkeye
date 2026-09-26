@@ -39,8 +39,11 @@ def one_run(run):
         print(f"{e['eval_number']:>3} {e['turn']:>5} {e.get('productive_turns_used', ''):>5} {e['kernel_writes_so_far']:>6}  "
               f"{str(e['status']):<14}{'' if sp is None else sp:>8} {'' if e.get('pct_of_roofline_limit') is None else e['pct_of_roofline_limit']:>10}  {tail}")
     first = next((e for e in r.get("eval_history") or [] if e["status"] == "correct"), None)
-    print(f"first correct kernel: {'never' if first is None else f'eval #{first['eval_number']} at raw turn {first['turn']}'}; "
-          f"best speedup seen: {best}")
+    if first is None:
+        first_text = "never"
+    else:
+        first_text = "eval #%d at raw turn %d" % (first["eval_number"], first["turn"])
+    print("first correct kernel: %s; best speedup seen: %s" % (first_text, best))
 
     print("\nTAXONOMY READS (turn, file)")
     reads = r.get("taxonomy_reads") or []
@@ -60,7 +63,7 @@ def one_run(run):
     print(f"  tool errors: {r.get('tool_errors')}  path-escape attempts: {r.get('path_escape_attempts')}  "
           f"guard rejections: {r.get('guard_rejections')}  kernel writes: {r.get('kernel_writes')}")
     kernels = sorted((run / "kernels").glob("*.py")) if (run / "kernels").exists() else []
-    print(f"  kernel snapshots saved: {len(kernels)} (in {run / 'kernels'})")
+    print("  kernel snapshots saved: %d (in %s)" % (len(kernels), run / "kernels"))
 
 
 def tag_table(tag):
