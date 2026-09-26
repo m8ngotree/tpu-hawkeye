@@ -41,6 +41,63 @@ def _record(result: dict, kernel_path: Path) -> None:
         best_file.write_text(json.dumps({"speedup_vs_baseline": speedup}))
 
 
+def _diagnosis(result: dict, workload: str, tpu: str) -> dict | None:
+    """Roofline view of the candidate kernel's timing.
+
+    Minimum HBM traffic is the workload's inputs plus its output, each moved once. Compared
+    against the chip's peak bandwidth and peak FLOPs this says whether the workload is
+    limited by memory or by compute, and how close the kernel is to that limit.
+    """
+    kernel = result.get("kernel") or {}
+    ms = kernel.get("median_ms")
+    if not ms:
+        return None
+    try:
+        import jax
+        import jax.numpy as jnp
+        import JAXBench
+        from JAXBench.harness.loader import load_module
+        from JAXBench.harness.tpu_specs import TPU_SPECS
+
+        path = Path(JAXBench.__file__).parent / "benchmark" / workload / "baseline.py"
+        mod = load_module(str(path), f"{workload}.diag")
+        create = mod.create_inputs
+        inputs = create(dtype=jnp.bfloat16) if "dtype" in create.__code__.co_varnames else create()
+        inputs = inputs if isinstance(inputs, (list, tuple)) else (inputs,)
+        in_bytes = sum(x.size * x.dtype.itemsize for x in jax.tree_util.tree_leaves(inputs))
+        out = jax.eval_shape(mod.workload, *inputs)
+        out_bytes = sum(x.size * x.dtype.itemsize for x in jax.tree_util.tree_leaves(out))
+    except Exception:  # noqa: BLE001 - diagnosis is best-effort, never fail an evaluation
+        return None
+
+    spec = TPU_SPECS[tpu]
+    seconds = ms / 1000.0
+    min_bytes = in_bytes + out_bytes
+    flops = (kernel.get("tflops") or 0.0) * 1e12 * seconds
+    peak_flops = spec["peak_tflops_bf16"] * 1e12
+    peak_bw = spec["hbm_bandwidth_gbs"] * 1e9
+    diag = {
+        "min_hbm_traffic_mb": round(min_bytes / 1e6, 2),
+        "achieved_hbm_gbs": round(min_bytes / seconds / 1e9, 1),
+        "hbm_bandwidth_pct_of_peak": round(min_bytes / seconds / peak_bw * 100, 1),
+        "mxu_pct_of_peak": kernel.get("utilization_pct"),
+    }
+    if flops > 0:
+        intensity = flops / min_bytes
+        ridge = peak_flops / peak_bw
+        limit_seconds = max(flops / peak_flops, min_bytes / peak_bw)
+        diag.update(
+            arithmetic_intensity_flop_per_byte=round(intensity, 1),
+            ridge_point_flop_per_byte=round(ridge, 1),
+            workload_limit="memory-bound" if intensity < ridge else "compute-bound",
+            pct_of_roofline_limit=round(limit_seconds / seconds * 100, 1),
+        )
+    else:
+        diag.update(workload_limit="memory-bound (no FLOP count available)",
+                    pct_of_roofline_limit=round(min_bytes / peak_bw / seconds * 100, 1))
+    return diag
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workload", required=True, help="JAXBench workload name, e.g. 12p_RMSNorm")
@@ -61,6 +118,10 @@ def main() -> None:
         num_warmup=args.num_warmup,
         num_iters=args.num_iters,
     )
+    if result.get("status") == "correct":
+        diagnosis = _diagnosis(result, args.workload, args.tpu)
+        if diagnosis:
+            result["diagnosis"] = diagnosis
     if (HERE / "JAXBench").exists():  # inside an agent workspace
         _record(result, args.kernel)
     print(json.dumps(result, indent=2))

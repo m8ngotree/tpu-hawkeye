@@ -91,7 +91,10 @@ def run_one(workload, condition, rep, args):
                 on_event=None if args.quiet else make_printer(f"{workload} {condition}"),
             )
             record.update(turns_used=agent_res.turns_used, stopped_reason=agent_res.stopped_reason,
-                          guard_rejections=agent_res.guard_rejections)
+                          guard_rejections=agent_res.guard_rejections,
+                          prompt_tokens=agent_res.prompt_tokens,
+                          completion_tokens=agent_res.completion_tokens,
+                          api_seconds=agent_res.api_seconds, tool_seconds=agent_res.tool_seconds)
         scored = ws / "best_kernel.py" if (ws / "best_kernel.py").exists() else ws / "kernel.py"
         record["scored_file"] = scored.name
         log = ws / "eval_log.jsonl"

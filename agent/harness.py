@@ -16,6 +16,7 @@ environment (a scratch cloud VM) -- not on a machine you care about.
 
 import json
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -87,6 +88,10 @@ class AgentRunResult:
     stopped_reason: str  # 'done' | 'max_turns' | 'error'
     final_eval: dict | None = None
     guard_rejections: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    api_seconds: float = 0.0
+    tool_seconds: float = 0.0
 
 
 def run_agent(
@@ -118,12 +123,22 @@ def run_agent(
     stopped_reason = "max_turns"
     turn = 0
     guard_rejections = 0
+    prompt_tokens = completion_tokens = 0
+    api_seconds = tool_seconds = 0.0
 
     with open(trajectory_path, "w") as trajectory_file:
         for turn in range(1, max_turns + 1):
             if on_event:
                 on_event("turn_start", turn, max_turns)
+            t0 = time.time()
             response = client.chat.completions.create(model=model, messages=messages, tools=TOOL_SCHEMAS)
+            call_seconds = time.time() - t0
+            api_seconds += call_seconds
+            usage = getattr(response, "usage", None)
+            turn_prompt = getattr(usage, "prompt_tokens", 0) or 0
+            turn_completion = getattr(usage, "completion_tokens", 0) or 0
+            prompt_tokens += turn_prompt
+            completion_tokens += turn_completion
             message = response.choices[0].message
             messages.append(message.model_dump(exclude_none=True))
             trajectory_file.write(
@@ -133,6 +148,10 @@ def run_agent(
                         "role": "assistant",
                         "content": message.content,
                         "tool_calls": [tc.model_dump() for tc in (message.tool_calls or [])],
+                        "time": t0,
+                        "api_seconds": round(call_seconds, 2),
+                        "prompt_tokens": turn_prompt,
+                        "completion_tokens": turn_completion,
                     }
                 )
                 + "\n"
@@ -149,10 +168,14 @@ def run_agent(
                 args = json.loads(tool_call.function.arguments or "{}")
                 impl = TOOL_IMPLS.get(name)
 
+                tool_elapsed = 0.0
                 if impl is None:
                     result_text = f"unknown tool: {name}"
                 else:
+                    t1 = time.time()
                     result = impl(workspace, **args)
+                    tool_elapsed = time.time() - t1
+                    tool_seconds += tool_elapsed
                     result_text = result.output
                     if result_text == REJECTION:
                         guard_rejections += 1
@@ -165,7 +188,8 @@ def run_agent(
                 if on_event:
                     on_event("tool", turn, name, args, result_text)
                 trajectory_file.write(
-                    json.dumps({"turn": turn, "role": "tool", "name": name, "args": args, "output": result_text}) + "\n"
+                    json.dumps({"turn": turn, "role": "tool", "name": name, "args": args, "output": result_text,
+                                "seconds": round(tool_elapsed, 2)}) + "\n"
                 )
                 messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result_text})
 
@@ -176,4 +200,8 @@ def run_agent(
         stopped_reason=stopped_reason,
         final_eval=final_eval,
         guard_rejections=guard_rejections,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        api_seconds=round(api_seconds, 1),
+        tool_seconds=round(tool_seconds, 1),
     )

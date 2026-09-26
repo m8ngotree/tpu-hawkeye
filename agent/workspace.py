@@ -31,14 +31,17 @@ Score = TFLOPS / baseline_tflops (higher is better). Must pass correctness first
   `workload(*inputs)` taking the same inputs (plain JAX or Pallas).
 - `eval.py` -- run `python eval.py --workload $workload_name --kernel kernel.py --tpu $generation`
   (add `--interpret` to check correctness on CPU with no TPU hours spent; drop it for
-  real timing on TPU). Prints a JSON result and exits 0 iff correct. It also remembers the fastest
+  real timing on TPU). Prints a JSON result and exits 0 iff correct. For a correct kernel the
+  result includes a `diagnosis` block: achieved HBM bandwidth and MXU utilization against the
+  chip's peaks, the workload's arithmetic intensity, whether it is memory- or compute-bound, and
+  how close the kernel is to that limit (`pct_of_roofline_limit`). It also remembers the fastest
   correct kernel you have evaluated; that one is what gets scored, so a failed experiment does
   not lose earlier progress.
 $taxonomy_section$kernel_pool_section
 ## Workflow
 Work only inside this directory; do not look for files elsewhere on the machine.
 
-1. Run `eval.py` on TPU (drop --interpret) to see the reference's timing and utilization.
+1. Run `eval.py` on TPU (drop --interpret) to see the reference's timing and `diagnosis`.
 2. Identify what's limiting throughput, make ONE targeted change to `kernel.py`, re-evaluate.
    Keep the change only if it stays correct and gets faster. Repeat.
 3. Stop when you're out of ideas or turns, whichever comes first.
