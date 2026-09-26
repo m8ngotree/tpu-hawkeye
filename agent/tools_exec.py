@@ -12,6 +12,7 @@ care about.
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -138,6 +139,16 @@ def list_files(workspace: Path, path: str = ".") -> ToolResult:
         return ToolResult(ok=False, output=str(e))
 
 
+_SECRET_NAME = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH", re.IGNORECASE)
+
+
+def _clean_env() -> dict:
+    """The environment for the evaluation subprocess, without anything that looks like a secret:
+    kernel.py runs as ordinary Python during evaluation, so whatever is in the environment is
+    readable by it."""
+    return {k: v for k, v in os.environ.items() if not _SECRET_NAME.search(k)}
+
+
 def run_eval(workspace: Path, timeout_s: int = 900) -> ToolResult:
     """Evaluate kernel.py with the workspace's eval.py. This is the only way the agent can
     execute code: there is no general shell, so it cannot introspect installed libraries."""
@@ -146,7 +157,7 @@ def run_eval(workspace: Path, timeout_s: int = 900) -> ToolResult:
            "--kernel", "kernel.py", "--tpu", config["generation"]]
     try:
         proc = subprocess.run(cmd, cwd=workspace, capture_output=True, text=True,
-                              encoding="utf-8", errors="replace", timeout=timeout_s)
+                              encoding="utf-8", errors="replace", timeout=timeout_s, env=_clean_env())
         return ToolResult(ok=proc.returncode == 0, output=_clip(proc.stdout + proc.stderr))
     except subprocess.TimeoutExpired:
         return ToolResult(ok=False, output=f"evaluation timed out after {timeout_s}s")

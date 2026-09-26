@@ -165,6 +165,29 @@ def _pallas_audit(kernel_path: Path, workload: str) -> dict | None:
     }
 
 
+_BANNED_SOURCE = re.compile(
+    r"getsource|getsourcelines|\binspect\b|importlib|subprocess|\bopen\s*\(|pathlib|\bglob\b|shutil"
+    r"|__import__|\bexec\s*\(|\beval\s*\(|\bcompile\s*\(|sys\.modules|os\.(system|popen|listdir|walk|scandir|getenv|environ\.(items|keys|copy))"
+    r"|loadtxt|genfromtxt|fromfile|np\.load|numpy\.load|read_text|read_bytes|urllib|requests|socket|\bhttp"
+    r"|\bhelp\s*\(|\bdir\s*\(|\bvars\s*\(|\bglobals\s*\(|__file__|__dict__|__doc__|site-packages")
+_ENV_USE = re.compile(r"os\.environ[^\n]*")
+_ALLOWED_ENV = re.compile(r"os\.environ\.get\(\s*[\"']PALLAS_INTERPRET[\"']")
+
+
+def _source_problem(source: str) -> str | None:
+    """Kernel files run as ordinary Python during evaluation, so they could read files, list
+    directories, print library source or read the environment. The agent may only write a kernel:
+    reject sources that do any of that. The one environment read allowed is the interpret flag
+    used by the taxonomy examples."""
+    match = _BANNED_SOURCE.search(source)
+    if match:
+        return f"kernel must only define the computation; `{match.group(0).strip()}` is not allowed"
+    for use in _ENV_USE.findall(source):
+        if not _ALLOWED_ENV.match(use):
+            return "kernel may only read the PALLAS_INTERPRET environment variable"
+    return None
+
+
 def _perturb_inputs(inputs):
     """A second, equally valid input set: any 2-D integer input that is a permutation of
     range(size) (a page table, for instance) is replaced by a random permutation. A kernel
@@ -261,6 +284,8 @@ def main() -> None:
         problem = "kernel must implement its main computation with pl.pallas_call; plain JAX is not accepted"
     elif re.search(r"pallas[./]ops|pallas\s+import\s+ops", source):
         problem = "kernel must not use the ready-made kernels in jax.experimental.pallas.ops"
+    if not problem:
+        problem = _source_problem(source)
     audit = None
     if not problem:
         audit = _pallas_audit(args.kernel, args.workload)
