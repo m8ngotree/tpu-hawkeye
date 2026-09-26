@@ -431,6 +431,7 @@ independently. Also report how often a correct kernel was produced at all, and c
 | `scripts/probe_buffering.py` | Sweeps block size and buffer depth (the measurement behind the async-pipeline finding) |
 | `scripts/inspect_profile.py` | Prints XLA cost analysis and profiler trace events for a workload/kernel; used to decide which signals the agent can see |
 | `scripts/show_trajectory.py` | Prints a saved trajectory compactly, turn by turn |
+| `scripts/analyze_run.py` | One run in detail (every evaluation with turn, status, speedup and distance to the roofline limit; taxonomy files read and when; compliance counters), or a table over a whole tag |
 | `scripts/analyze_taxonomy_use.py` | For saved runs: which cell files were opened and when, evaluations after the first read, and which cell-specific code constructs show up in the kernels the agent wrote |
 | `scripts/score_workspace.py` | Scores an interrupted workspace and saves it like a finished run (`stopped_reason: interrupted`) |
 
@@ -477,24 +478,30 @@ Never paste an API key into chat, logs, or the repo; if one leaks, revoke it.
 ## 11. Analysing a run
 
 Per run folder under `results/runs/<tag>/<condition>/<workload>_r<rep>/`:
-- `result.json`: outcome, independent score, token and time counts.
-- `trajectory.jsonl`: every turn (what it read, what it wrote, tool outputs, errors).
-- `eval_log.jsonl`: the sequence of evaluations (progress over time; failures).
-- `best_kernel.py`: the scored kernel; diff it against `baseline.py`.
-- `kernel.py`: where the agent ended.
-- A run where the agent never produced a correct Pallas kernel is recorded as
-  `no_correct_kernel`, with `speedup_for_geomean` = 0.01 (the paper's treatment of failures).
+- `result.json`: outcome and independent score, plus everything needed to analyse behaviour:
+  `settings` (model, budgets), `code_version` (git commit), `eval_history` (one entry per
+  `run_eval`: raw turn, productive turns used, status, speedup, `pct_of_roofline_limit`,
+  error), `taxonomy_reads` (every taxonomy file read, with turn), `tool_counts`,
+  `tool_errors`, `path_escape_attempts`, `guard_rejections`, `kernel_writes`, tokens and times.
+- `trajectory.jsonl`: every turn: the model's text and reasoning (when the API returns it),
+  tool calls, tool outputs, `ok`, whether the turn was productive, timing, tokens.
+- `kernels/`: every version of `kernel.py` the agent wrote (`kernel_t<turn>_<n>.py`), so
+  the whole path of the design can be diffed.
+- `eval_log.jsonl`, `best_kernel.py`, `kernel.py`, `task_prompt.md`.
+
+`python scripts/analyze_run.py <run dir>` prints the progress table, taxonomy reads, and
+compliance audit for one run; `python scripts/analyze_run.py results/runs/<tag>` prints one
+row per run.
 
 Questions and where to look:
-- Did it beat the baseline? `result.json`.
-- How much effort was wasted? `agent_own_kernels_correct / agent_own_kernel_evals`.
-- What errors cost it turns? Tool outputs in `trajectory.jsonl`.
-- Did it use the taxonomy, and did it help? `scripts/analyze_taxonomy_use.py`, then compare
-  with the same workload's `none` run.
-- How close is the kernel to the ceiling? The `diagnosis` block in its last `eval.py` output.
-
-Only the best and final kernels are saved; earlier attempts are recoverable from the
-`write_file` arguments in the trajectory.
+- Did it beat the baseline? `result.json`, `no_correct_kernel` if it never produced a kernel.
+- How did it progress? `eval_history` / the analyze_run table; diff the files in `kernels/`.
+- Is it doing only what it should? `tool_counts` (any tool that does not exist shows up),
+  `path_escape_attempts`, `guard_rejections`, and the tool outputs in the trajectory.
+- Did it use the taxonomy, and did it help? `taxonomy_reads` against when the first correct
+  kernel appeared; `scripts/analyze_taxonomy_use.py` for which cell constructs appear in its kernels;
+  then compare with the same workload's `none` run.
+- How close is the kernel to the ceiling? `pct_of_roofline_limit` in `eval_history`.
 
 ---
 

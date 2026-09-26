@@ -18,6 +18,7 @@ import json
 import os
 import re
 import time
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -106,6 +107,12 @@ class AgentRunResult:
     api_seconds: float = 0.0
     tool_seconds: float = 0.0
     productive_turns: int = 0
+    tool_counts: dict | None = None
+    tool_errors: int = 0
+    path_escape_attempts: int = 0
+    kernel_writes: int = 0
+    taxonomy_reads: list | None = None  # [{turn, path}] every taxonomy file read, repeats included
+    eval_history: list | None = None  # one entry per run_eval call
 
 
 _TAXONOMY_FILE = re.compile(r"taxonomy/[\w./*-]+\.(?:py|md|json)")
@@ -165,6 +172,12 @@ def run_agent(
     stopped_reason = "max_raw_turns"
     productive_turns = 0
     seen_taxonomy: set = set()
+    tool_counts: Counter = Counter()
+    tool_errors = path_escape_attempts = kernel_writes = 0
+    taxonomy_reads: list = []
+    eval_history: list = []
+    kernels_dir = workspace.parent / f"{workspace.name}.kernels"  # every kernel.py the agent wrote
+    kernels_dir.mkdir(exist_ok=True)
     turn = 0
     guard_rejections = 0
     prompt_tokens = completion_tokens = 0
@@ -195,7 +208,11 @@ def run_agent(
                         "turn": turn,
                         "role": "assistant",
                         "content": message.content,
+                        "reasoning": getattr(message, "reasoning_content", None)
+                        or (getattr(message, "model_extra", None) or {}).get("reasoning_content"),
                         "tool_calls": [tc.model_dump() for tc in (message.tool_calls or [])],
+                        "finish_reason": response.choices[0].finish_reason,
+                        "productive_turns_so_far": productive_turns,
                         "time": t0,
                         "api_seconds": round(call_seconds, 2),
                         "prompt_tokens": turn_prompt,
@@ -220,6 +237,7 @@ def run_agent(
                 impl = TOOL_IMPLS.get(name)
 
                 tool_elapsed = 0.0
+                result = None
                 if impl is None:
                     result_text = f"unknown tool: {name}"
                 else:
@@ -239,15 +257,46 @@ def run_agent(
                         except json.JSONDecodeError:
                             pass
 
+                tool_counts[name] += 1
+                tool_ok = result is not None and result.ok
+                if not tool_ok:
+                    tool_errors += 1
+                if "resolves outside workspace" in result_text:
+                    path_escape_attempts += 1
+                snapshot = None
+                if name == "write_file" and tool_ok and str(args.get("path", "")).strip("./") == "kernel.py":
+                    kernel_writes += 1
+                    snapshot = f"kernel_t{turn:03d}_{kernel_writes:02d}.py"
+                    (kernels_dir / snapshot).write_text(str(args.get("content", "")))
+                if name == "read_file" and _TAXONOMY_FILE.fullmatch(str(args.get("path", "")).lstrip("./")):
+                    taxonomy_reads.append({"turn": turn, "path": str(args["path"]).lstrip("./")})
+                if name == "run_eval":
+                    entry = {"turn": turn, "eval_number": len(eval_history) + 1, "kernel_writes_so_far": kernel_writes}
+                    try:
+                        parsed = json.loads(result_text)
+                    except json.JSONDecodeError:
+                        parsed = {}
+                    entry["status"] = parsed.get("status", "error")
+                    entry["speedup"] = parsed.get("speedup_vs_baseline")
+                    diag = parsed.get("diagnosis") or {}
+                    entry["pct_of_roofline_limit"] = diag.get("pct_of_roofline_limit")
+                    entry["workload_limit"] = diag.get("workload_limit")
+                    entry["error"] = str(parsed.get("error") or "")[:300] or None
+                    eval_history.append(entry)
+
                 if on_event:
                     on_event("tool", turn, name, args, result_text)
                 trajectory_file.write(
                     json.dumps({"turn": turn, "role": "tool", "name": name, "args": args, "output": result_text,
-                                "seconds": round(tool_elapsed, 2), "productive": turn_productive}) + "\n"
+                                "ok": tool_ok, "seconds": round(tool_elapsed, 2), "turn_productive": turn_productive,
+                                "kernel_snapshot": snapshot}) + "\n"
                 )
                 messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result_text})
             if turn_productive:
                 productive_turns += 1
+            for entry in eval_history:
+                if entry["turn"] == turn:
+                    entry["productive_turns_used"] = productive_turns
 
     return AgentRunResult(
         workspace=workspace,
@@ -261,4 +310,10 @@ def run_agent(
         api_seconds=round(api_seconds, 1),
         tool_seconds=round(tool_seconds, 1),
         productive_turns=productive_turns,
+        tool_counts=dict(tool_counts),
+        tool_errors=tool_errors,
+        path_escape_attempts=path_escape_attempts,
+        kernel_writes=kernel_writes,
+        taxonomy_reads=taxonomy_reads,
+        eval_history=eval_history,
     )

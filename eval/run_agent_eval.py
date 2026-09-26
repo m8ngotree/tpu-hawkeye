@@ -36,6 +36,14 @@ from agent.harness import run_agent
 from agent.workspace import build_workspace
 
 
+def code_version():
+    try:
+        return subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True,
+                              text=True).stdout.strip() or None
+    except Exception:
+        return None
+
+
 def score_in_subprocess(workload, kernel, interpret):
     """Score in a separate process: a TPU can be opened by one process at a time, so an
     in-process score would hold it and starve the next agent run's eval.py calls."""
@@ -82,7 +90,11 @@ def make_printer(label):
 def run_one(workload, condition, rep, args):
     run_dir = ROOT / "results" / "runs" / args.tag / condition / f"{workload}_r{rep}"
     work_dir = Path(args.work_dir).expanduser() / args.tag / condition / f"{workload}_r{rep}"
-    record = {"workload": workload, "condition": condition, "rep": rep, "tag": args.tag}
+    record = {"workload": workload, "condition": condition, "rep": rep, "tag": args.tag,
+              "settings": {"model": args.model, "base_url": args.base_url,
+                           "max_productive_turns": args.max_productive_turns,
+                           "max_raw_turns": args.max_raw_turns, "tpu": "v5e", "interpret": args.interpret},
+              "code_version": code_version(), "started_at": time.strftime("%Y-%m-%d %H:%M:%S")}
     result_path = run_dir / "result.json"
     if result_path.exists() and not args.force:
         previous = json.loads(result_path.read_text())
@@ -107,6 +119,12 @@ def run_one(workload, condition, rep, args):
             record.update(turns_used=agent_res.turns_used, stopped_reason=agent_res.stopped_reason,
                           guard_rejections=agent_res.guard_rejections,
                           productive_turns=agent_res.productive_turns,
+                          tool_counts=agent_res.tool_counts, tool_errors=agent_res.tool_errors,
+                          path_escape_attempts=agent_res.path_escape_attempts,
+                          kernel_writes=agent_res.kernel_writes,
+                          taxonomy_reads=agent_res.taxonomy_reads,
+                          taxonomy_files_read=sorted({r["path"] for r in agent_res.taxonomy_reads}),
+                          eval_history=agent_res.eval_history,
                           prompt_tokens=agent_res.prompt_tokens,
                           completion_tokens=agent_res.completion_tokens,
                           api_seconds=agent_res.api_seconds, tool_seconds=agent_res.tool_seconds)
@@ -140,6 +158,9 @@ def run_one(workload, condition, rep, args):
     trajectory = work_dir.parent / f"{work_dir.name}.trajectory.jsonl"
     if trajectory.exists():
         shutil.copy(trajectory, run_dir / "trajectory.jsonl")
+    kernels = work_dir.parent / f"{work_dir.name}.kernels"
+    if kernels.exists():
+        shutil.copytree(kernels, run_dir / "kernels", dirs_exist_ok=True)
     result_path.write_text(json.dumps(record, indent=2))
     return record
 
