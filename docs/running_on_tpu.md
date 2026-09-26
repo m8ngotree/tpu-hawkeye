@@ -96,7 +96,7 @@ Results are saved to `results/cell_verification_summary_hardware.json`.
 
 ```bash
 export LLM_API_KEY=your-deepseek-key      # typed in the shell only; never commit it
-python -m eval.run_agent_eval --workloads 12p_RMSNorm --conditions taxonomy --max-turns 10 --tag smoke
+python -m eval.run_agent_eval --workloads 12p_RMSNorm --conditions taxonomy --max-productive-turns 10 --tag smoke
 ```
 
 One real agent run of at most 10 turns (cents of API cost). Check that it completes
@@ -110,7 +110,7 @@ re-scored outcome.
 ```bash
 python -m eval.run_agent_eval \
   --workloads 12p_RMSNorm,8p_GEMM,41k_Gemm_Add_ReLU \
-  --conditions taxonomy none --reps 1 --max-turns 30 --tag pilot
+  --conditions taxonomy none --reps 1 --max-productive-turns 30 --tag pilot
 ```
 
 Record API cost, turns used, and how often the final kernel is correct in each

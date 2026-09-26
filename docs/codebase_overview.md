@@ -291,7 +291,10 @@ sandbox: code the agent writes could still open arbitrary paths. Each rejection 
 1. Messages = system prompt + `task_prompt.md`.
 2. Send messages and tool schemas to the model.
 3. If the reply has tool calls, execute each, append results as tool messages, repeat.
-4. Stop when the model replies without tool calls or after `max_turns`.
+4. Stop when the model replies without tool calls, when the productive-turn budget is used up
+   (default 50), or at a raw-call safety cap (default 200). A turn is **productive**, as in
+   Hawkeye, if it edits `kernel.py`, runs `eval.py`, or reads a taxonomy file for the first time;
+   listings, greps, library-source reading and other exploration are free.
 
 Every turn, the **entire** message list is re-sent. So files the agent has read stay in its
 context for the rest of the run (and are paid for again as input tokens each turn); nothing
@@ -355,7 +358,7 @@ The agent's own claims are never trusted. After a run ends, the runner re-scores
 repo's JAXBench harness, 5 warmup and 50 timed iterations) and writes `result.json`.
 
 Key fields: `workload`, `condition`, `rep`, `tag`, `turns_used`, `stopped_reason`
-(`done`, `max_turns`, `interrupted`, `error`), `scored_file`, `status`, `correct`,
+(`done`, `max_productive_turns`, `max_raw_turns`, `interrupted`, `error`), `productive_turns`, `scored_file`, `status`, `correct`,
 `speedup_vs_baseline`, `kernel_median_ms`, `baseline_median_ms`, `error`,
 `guard_rejections`, token and time totals, and the agent-side counts
 `agent_eval_calls`, `agent_own_kernel_evals`, `agent_own_kernels_correct`,
@@ -364,8 +367,7 @@ untouched baseline copy).
 
 ### 7.5 Runner behavior
 
-Arguments: `--workloads` (comma-separated names), `--conditions taxonomy none`, `--reps`,
-`--max-turns`, `--model`, `--base-url`, `--api-key-env`, `--tag`, `--work-dir`, `--quiet`,
+Arguments (turn limits: `--max-productive-turns`, `--max-raw-turns`): `--workloads` (comma-separated names), `--conditions taxonomy none`, `--reps`, `--model`, `--base-url`, `--api-key-env`, `--tag`, `--work-dir`, `--quiet`,
 `--dry-run`, `--interpret`, `--force`. Runs that already have a `result.json` are skipped
 (except `harness_error` ones, which are retried), so an interrupted or preempted sweep can
 be resumed by re-running the same command. Each finished run is saved to
@@ -453,7 +455,7 @@ read -s -p "API key: " K; echo "export LLM_API_KEY=$K" > ~/.llm_key; chmod 600 ~
 python scripts/verify_cells.py
 source ~/.llm_key
 python eval/run_agent_eval.py --workloads 8p_GEMM --conditions taxonomy none --reps 1 \
-  --max-turns 48 --model deepseek-v4-pro --tag mytest
+  --max-productive-turns 50 --model deepseek-flash --tag mytest
 ```
 
 Use `tmux` for long runs so a dropped connection does not kill them. Copy `results/` off

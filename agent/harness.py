@@ -16,6 +16,7 @@ environment (a scratch cloud VM) -- not on a machine you care about.
 
 import json
 import os
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -90,13 +91,37 @@ class AgentRunResult:
     workspace: Path
     trajectory_path: Path
     turns_used: int
-    stopped_reason: str  # 'done' | 'max_turns' | 'error'
+    stopped_reason: str  # 'done' | 'max_productive_turns' | 'max_raw_turns'
     final_eval: dict | None = None
     guard_rejections: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
     api_seconds: float = 0.0
     tool_seconds: float = 0.0
+    productive_turns: int = 0
+
+
+_TAXONOMY_FILE = re.compile(r"taxonomy/[\w./*-]+\.(?:py|md|json)")
+
+
+def _productive_actions(name: str, args: dict, seen_taxonomy: set) -> bool:
+    """Whether one tool call is a 'productive' action, as Hawkeye counts turns: a kernel edit,
+    an evaluation, or the first read of a taxonomy file. Listings, greps, library source and
+    other exploration are free. `seen_taxonomy` is updated so re-reading a file is free."""
+    if name == "write_file":
+        return str(args.get("path", "")).strip("./") == "kernel.py"
+    if name == "run_bash":
+        command = str(args.get("command", ""))
+        paths = set(_TAXONOMY_FILE.findall(command))
+        new = paths - seen_taxonomy
+        seen_taxonomy |= paths
+        return "eval.py" in command or bool(new)
+    if name == "read_file":
+        path = str(args.get("path", "")).lstrip("./")
+        if _TAXONOMY_FILE.fullmatch(path) and path not in seen_taxonomy:
+            seen_taxonomy.add(path)
+            return True
+    return False
 
 
 def run_agent(
@@ -104,11 +129,14 @@ def run_agent(
     model: str = "deepseek-chat",
     base_url: str = "https://api.deepseek.com",
     api_key_env: str = "LLM_API_KEY",
-    max_turns: int = 100,
+    max_productive_turns: int = 50,
+    max_raw_turns: int = 200,
     on_event=None,
 ) -> AgentRunResult:
     """Run the tool-use loop against `workspace` (built by agent/workspace.py) until
-    the model stops calling tools or max_turns is hit. Logs every turn to
+    the model stops calling tools, `max_productive_turns` productive turns have been used (see
+    _productive_actions; this is the budget, as in Hawkeye), or `max_raw_turns` model calls have been
+    made (a safety cap). Logs every turn to
     <workspace>.trajectory.jsonl beside the workspace directory (mirrors Hawkeye's own trajectory.jsonl, Appendix G.4,
     so a run can be audited turn-by-turn afterward)."""
     api_key = os.environ.get(api_key_env)
@@ -125,16 +153,22 @@ def run_agent(
 
     trajectory_path = workspace.parent / f"{workspace.name}.trajectory.jsonl"  # outside the workspace: the agent must not see it
     final_eval = None
-    stopped_reason = "max_turns"
+    stopped_reason = "max_raw_turns"
+    productive_turns = 0
+    seen_taxonomy: set = set()
     turn = 0
     guard_rejections = 0
     prompt_tokens = completion_tokens = 0
     api_seconds = tool_seconds = 0.0
 
     with open(trajectory_path, "w") as trajectory_file:
-        for turn in range(1, max_turns + 1):
+        for turn in range(1, max_raw_turns + 1):
+            if productive_turns >= max_productive_turns:
+                stopped_reason = "max_productive_turns"
+                turn -= 1
+                break
             if on_event:
-                on_event("turn_start", turn, max_turns)
+                on_event("turn_start", turn, max_raw_turns, productive_turns, max_productive_turns)
             t0 = time.time()
             response = client.chat.completions.create(model=model, messages=messages, tools=TOOL_SCHEMAS)
             call_seconds = time.time() - t0
@@ -168,9 +202,12 @@ def run_agent(
                 stopped_reason = "done"
                 break
 
+            turn_productive = False
             for tool_call in message.tool_calls:
                 name = tool_call.function.name
                 args = json.loads(tool_call.function.arguments or "{}")
+                if _productive_actions(name, args, seen_taxonomy):
+                    turn_productive = True
                 impl = TOOL_IMPLS.get(name)
 
                 tool_elapsed = 0.0
@@ -197,9 +234,11 @@ def run_agent(
                     on_event("tool", turn, name, args, result_text)
                 trajectory_file.write(
                     json.dumps({"turn": turn, "role": "tool", "name": name, "args": args, "output": result_text,
-                                "seconds": round(tool_elapsed, 2)}) + "\n"
+                                "seconds": round(tool_elapsed, 2), "productive": turn_productive}) + "\n"
                 )
                 messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result_text})
+            if turn_productive:
+                productive_turns += 1
 
     return AgentRunResult(
         workspace=workspace,
@@ -212,4 +251,5 @@ def run_agent(
         completion_tokens=completion_tokens,
         api_seconds=round(api_seconds, 1),
         tool_seconds=round(tool_seconds, 1),
+        productive_turns=productive_turns,
     )

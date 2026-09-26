@@ -1,7 +1,7 @@
 """Run the coding agent over JAXBench workloads and score the kernel it leaves behind.
 
     python -m eval.run_agent_eval --workloads 12p_RMSNorm --conditions taxonomy none \
-        --max-turns 30 --tag pilot
+        --max-productive-turns 50 --tag pilot
 
 Conditions: `taxonomy` (workspace includes taxonomy/) and `none` (it does not).
 Every other setting is identical between conditions. The final kernel is re-scored
@@ -58,8 +58,8 @@ def make_printer(label):
 
     def on_event(kind, *info):
         if kind == "turn_start":
-            turn, max_turns = info
-            print(f"[{label}] turn {turn}/{max_turns}", flush=True)
+            turn, max_raw, productive, max_productive = info
+            print(f"[{label}] turn {turn} (productive {productive}/{max_productive}, raw cap {max_raw})", flush=True)
         elif kind == "assistant":
             turn, content, tool_calls = info
             if content:
@@ -100,11 +100,13 @@ def run_one(workload, condition, rep, args):
         if not args.dry_run:
             agent_res = run_agent(
                 ws, model=args.model, base_url=args.base_url,
-                api_key_env=args.api_key_env, max_turns=args.max_turns,
+                api_key_env=args.api_key_env,
+                max_productive_turns=args.max_productive_turns, max_raw_turns=args.max_raw_turns,
                 on_event=None if args.quiet else make_printer(f"{workload} {condition}"),
             )
             record.update(turns_used=agent_res.turns_used, stopped_reason=agent_res.stopped_reason,
                           guard_rejections=agent_res.guard_rejections,
+                          productive_turns=agent_res.productive_turns,
                           prompt_tokens=agent_res.prompt_tokens,
                           completion_tokens=agent_res.completion_tokens,
                           api_seconds=agent_res.api_seconds, tool_seconds=agent_res.tool_seconds)
@@ -147,7 +149,9 @@ def main():
     ap.add_argument("--workloads", required=True, help="comma-separated JAXBench names")
     ap.add_argument("--conditions", nargs="+", default=["taxonomy", "none"])
     ap.add_argument("--reps", type=int, default=1)
-    ap.add_argument("--max-turns", type=int, default=30)
+    ap.add_argument("--max-productive-turns", type=int, default=50,
+                    help="budget: turns with a kernel edit, an evaluation, or a first taxonomy read")
+    ap.add_argument("--max-raw-turns", type=int, default=200, help="safety cap on model calls")
     ap.add_argument("--model", default="deepseek-chat")
     ap.add_argument("--base-url", default="https://api.deepseek.com")
     ap.add_argument("--api-key-env", default="LLM_API_KEY")
@@ -167,7 +171,7 @@ def main():
                 r = run_one(workload, condition, rep, args)
                 records.append(r)
                 print(f"{workload:<28}{condition:<10}rep{rep}  status={r.get('status')}  "
-                      f"speedup={r.get('speedup_vs_baseline')}  turns={r.get('turns_used')}  "
+                      f"speedup={r.get('speedup_vs_baseline')}  turns={r.get('turns_used')} (productive {r.get('productive_turns')})  "
                       f"own_kernels_correct={r.get('agent_own_kernels_correct')}/{r.get('agent_own_kernel_evals')}")
     out = ROOT / "results" / f"{args.tag}_summary.json"
     out.write_text(json.dumps(records, indent=2))

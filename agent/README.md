@@ -50,7 +50,7 @@ Pass@1 sweep) is just re-running `run_agent()` with a different `model`/`base_ur
    the tool-use loop itself. Sends the system prompt + `task_prompt.md`, calls the
    model with the three tool schemas, executes whichever tool it calls via
    `tools_exec.py`, feeds the result back, repeats until the model stops calling
-   tools or `max_turns` is hit. Logs every turn to `trajectory.jsonl` (mirrors
+   tools or the productive-turn budget or the raw-turn cap is hit. Logs every turn to `trajectory.jsonl` (mirrors
    Hawkeye's own trajectory log, Appendix G.4). Needs `LLM_API_KEY` set in the
    environment before running.
 
