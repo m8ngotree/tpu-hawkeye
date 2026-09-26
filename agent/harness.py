@@ -95,6 +95,7 @@ def run_agent(
     base_url: str = "https://api.deepseek.com",
     api_key_env: str = "LLM_API_KEY",
     max_turns: int = 100,
+    on_event=None,
 ) -> AgentRunResult:
     """Run the tool-use loop against `workspace` (built by agent/workspace.py) until
     the model stops calling tools or max_turns is hit. Logs every turn to
@@ -120,6 +121,8 @@ def run_agent(
 
     with open(trajectory_path, "w") as trajectory_file:
         for turn in range(1, max_turns + 1):
+            if on_event:
+                on_event("turn_start", turn, max_turns)
             response = client.chat.completions.create(model=model, messages=messages, tools=TOOL_SCHEMAS)
             message = response.choices[0].message
             messages.append(message.model_dump(exclude_none=True))
@@ -135,6 +138,8 @@ def run_agent(
                 + "\n"
             )
 
+            if on_event:
+                on_event("assistant", turn, message.content, message.tool_calls or [])
             if not message.tool_calls:
                 stopped_reason = "done"
                 break
@@ -157,6 +162,8 @@ def run_agent(
                         except json.JSONDecodeError:
                             pass
 
+                if on_event:
+                    on_event("tool", turn, name, args, result_text)
                 trajectory_file.write(
                     json.dumps({"turn": turn, "role": "tool", "name": name, "args": args, "output": result_text}) + "\n"
                 )

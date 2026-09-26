@@ -21,6 +21,7 @@ Requires LLM_API_KEY. --interpret scores on CPU (correctness only); omit it on a
 
 import argparse
 import json
+import re
 import shutil
 import sys
 import time
@@ -33,6 +34,36 @@ sys.path.insert(0, str(ROOT))
 from agent.harness import run_agent
 from agent.runner import run_kernel
 from agent.workspace import build_workspace
+
+
+def make_printer(label):
+    """Return an on_event callback that prints one compact line per agent action."""
+
+    def clip(text, n):
+        text = " ".join(str(text).split())
+        return text if len(text) <= n else text[:n] + "..."
+
+    def on_event(kind, *info):
+        if kind == "turn_start":
+            turn, max_turns = info
+            print(f"[{label}] turn {turn}/{max_turns}", flush=True)
+        elif kind == "assistant":
+            turn, content, tool_calls = info
+            if content:
+                print(f"    says: {clip(content, 160)}", flush=True)
+        elif kind == "tool":
+            turn, name, tool_args, output = info
+            cmd = tool_args.get("command") or tool_args.get("path") or ""
+            line = f"    {name}: {clip(cmd, 110)}"
+            if "eval.py" in str(cmd):
+                status = re.search(r'"status":\s*"(\w+)"', output)
+                speed = re.search(r'"speedup_vs_baseline":\s*([0-9.]+)', output)
+                line += f"\n      -> status={status.group(1) if status else '?'}" + (f" speedup={speed.group(1)}" if speed else "")
+            else:
+                line += f"\n      -> {clip(output, 130)}"
+            print(line, flush=True)
+
+    return on_event
 
 
 def run_one(workload, condition, rep, args):
@@ -57,6 +88,7 @@ def run_one(workload, condition, rep, args):
             agent_res = run_agent(
                 ws, model=args.model, base_url=args.base_url,
                 api_key_env=args.api_key_env, max_turns=args.max_turns,
+                on_event=None if args.quiet else make_printer(f"{workload} {condition}"),
             )
             record.update(turns_used=agent_res.turns_used, stopped_reason=agent_res.stopped_reason,
                           guard_rejections=agent_res.guard_rejections)
@@ -98,6 +130,7 @@ def main():
     ap.add_argument("--interpret", action="store_true")
     ap.add_argument("--dry-run", action="store_true", help="skip the agent; score the empty starting kernel")
     ap.add_argument("--tag", default="run")
+    ap.add_argument("--quiet", action="store_true", help="do not print per-turn progress")
     ap.add_argument("--work-dir", default="~/hawkeye_work",
                     help="where agent workspaces are built; keep it outside the repo checkout")
     ap.add_argument("--force", action="store_true", help="redo runs that already have a result.json")
