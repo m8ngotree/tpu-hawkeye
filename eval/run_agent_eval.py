@@ -120,9 +120,12 @@ def run_one(workload, condition, rep, args):
                       traceback=traceback.format_exc()[-800:])
     record["wall_s"] = round(time.time() - t0, 1)
     run_dir.mkdir(parents=True, exist_ok=True)
-    for name in ("trajectory.jsonl", "kernel.py", "best_kernel.py", "eval_log.jsonl", "task_prompt.md"):
+    for name in ("kernel.py", "best_kernel.py", "eval_log.jsonl", "task_prompt.md"):
         if (work_dir / name).exists():
             shutil.copy(work_dir / name, run_dir / name)
+    trajectory = work_dir.parent / f"{work_dir.name}.trajectory.jsonl"
+    if trajectory.exists():
+        shutil.copy(trajectory, run_dir / "trajectory.jsonl")
     result_path.write_text(json.dumps(record, indent=2))
     return record
 

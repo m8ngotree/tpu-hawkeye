@@ -40,9 +40,12 @@ def main():
     entries = [json.loads(l) for l in log.read_text().splitlines()] if log.exists() else []
     own = [e for e in entries if not e.get("is_reference")]
     own_correct = [e for e in own if e.get("status") == "correct"]
+    trajectory = ws.parent / f"{ws.name}.trajectory.jsonl"
+    if not trajectory.exists():
+        trajectory = ws / "trajectory.jsonl"  # runs made before the log moved outside the workspace
     turns = 0
-    if (ws / "trajectory.jsonl").exists():
-        turns = max((json.loads(l)["turn"] for l in (ws / "trajectory.jsonl").read_text().splitlines()), default=0)
+    if trajectory.exists():
+        turns = max((json.loads(l)["turn"] for l in trajectory.read_text().splitlines()), default=0)
 
     final = run_kernel(workload, scored, tpu="v5e", interpret=args.interpret, num_warmup=5, num_iters=50)
     record = {
@@ -58,9 +61,11 @@ def main():
     }
     run_dir = ROOT / "results" / "runs" / tag / condition / ws.name
     run_dir.mkdir(parents=True, exist_ok=True)
-    for name in ("trajectory.jsonl", "kernel.py", "best_kernel.py", "eval_log.jsonl", "task_prompt.md"):
+    for name in ("kernel.py", "best_kernel.py", "eval_log.jsonl", "task_prompt.md"):
         if (ws / name).exists():
             shutil.copy(ws / name, run_dir / name)
+    if trajectory.exists():
+        shutil.copy(trajectory, run_dir / "trajectory.jsonl")
     (run_dir / "result.json").write_text(json.dumps(record, indent=2))
     print(f"{workload:<28}{condition:<10}rep{rep}  status={record['status']}  "
           f"speedup={record['speedup_vs_baseline']}  turns={turns} (interrupted)  "

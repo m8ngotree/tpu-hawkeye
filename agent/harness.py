@@ -58,7 +58,7 @@ TOOL_SCHEMAS = [
             "name": "run_bash",
             "description": (
                 "Run a shell command from the workspace root, e.g. "
-                "`python eval.py --workload X --kernel kernel.py --interpret`. "
+                "`python eval.py --workload X --kernel kernel.py`. "
                 "Returns combined stdout+stderr."
             ),
             "parameters": {
@@ -104,7 +104,7 @@ def run_agent(
 ) -> AgentRunResult:
     """Run the tool-use loop against `workspace` (built by agent/workspace.py) until
     the model stops calling tools or max_turns is hit. Logs every turn to
-    workspace/trajectory.jsonl (mirrors Hawkeye's own trajectory.jsonl, Appendix G.4,
+    <workspace>.trajectory.jsonl beside the workspace directory (mirrors Hawkeye's own trajectory.jsonl, Appendix G.4,
     so a run can be audited turn-by-turn afterward)."""
     api_key = os.environ.get(api_key_env)
     if not api_key:
@@ -118,7 +118,7 @@ def run_agent(
         {"role": "user", "content": task_prompt},
     ]
 
-    trajectory_path = workspace / "trajectory.jsonl"
+    trajectory_path = workspace.parent / f"{workspace.name}.trajectory.jsonl"  # outside the workspace: the agent must not see it
     final_eval = None
     stopped_reason = "max_turns"
     turn = 0
