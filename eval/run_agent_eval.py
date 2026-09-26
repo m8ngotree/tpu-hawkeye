@@ -23,6 +23,7 @@ import argparse
 import json
 import re
 import shutil
+import subprocess
 import sys
 import time
 import traceback
@@ -32,8 +33,20 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from agent.harness import run_agent
-from agent.runner import run_kernel
 from agent.workspace import build_workspace
+
+
+def score_in_subprocess(workload, kernel, interpret):
+    """Score in a separate process: a TPU can be opened by one process at a time, so an
+    in-process score would hold it and starve the next agent run's eval.py calls."""
+    cmd = [sys.executable, "-m", "agent.score_cli", "--workload", workload, "--kernel", str(kernel)]
+    if interpret:
+        cmd.append("--interpret")
+    proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, errors="replace", timeout=1800)
+    for line in reversed(proc.stdout.splitlines()):
+        if line.startswith("SCORE_JSON "):
+            return json.loads(line[len("SCORE_JSON "):])
+    raise RuntimeError(f"scoring failed: {(proc.stdout + proc.stderr)[-600:]}")
 
 
 def make_printer(label):
@@ -105,16 +118,7 @@ def run_one(workload, condition, rep, args):
         record["agent_own_kernel_evals"] = len(own)
         record["agent_own_kernels_correct"] = len(own_correct)
         record["agent_own_best_speedup"] = max((e["speedup_vs_baseline"] for e in own_correct), default=None)
-        final = run_kernel(
-            workload, scored, tpu="v5e", interpret=args.interpret,
-            num_warmup=5, num_iters=50,
-        )
-        record.update(
-            status=final.status, correct=final.correct,
-            speedup_vs_baseline=final.speedup_vs_baseline,
-            kernel_median_ms=final.kernel_median_ms,
-            baseline_median_ms=final.baseline_median_ms, error=final.error,
-        )
+        record.update(score_in_subprocess(workload, scored, args.interpret))
     except Exception as e:
         record.update(status="harness_error", error=f"{type(e).__name__}: {e}",
                       traceback=traceback.format_exc()[-800:])
