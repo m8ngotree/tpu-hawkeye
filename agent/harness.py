@@ -118,6 +118,20 @@ class AgentRunResult:
 _TAXONOMY_FILE = re.compile(r"taxonomy/[\w./*-]+\.(?:py|md|json)")
 
 
+def extract_result_json(text: str) -> dict:
+    """The JSON object eval.py prints, found inside output that may also contain warning lines
+    from JAX/XLA on stderr. Returns {} if there is none."""
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"(?m)^\{", text):
+        try:
+            obj, _ = decoder.raw_decode(text[match.start():])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict) and "status" in obj:
+            return obj
+    return {}
+
+
 def _productive_actions(name: str, args: dict) -> bool:
     """Whether one tool call is a 'productive' action, as Hawkeye counts turns: a kernel edit,
     an evaluation, or a taxonomy read. Every taxonomy read counts, repeats included (the paper
@@ -241,11 +255,8 @@ def run_agent(
                     result_text = result.output
                     if result_text == REJECTION:
                         guard_rejections += 1
-                    if name == "run_eval" and '"correctness"' in result_text:
-                        try:
-                            final_eval = json.loads(result_text)
-                        except json.JSONDecodeError:
-                            pass
+                    if name == "run_eval":
+                        final_eval = extract_result_json(result_text) or final_eval
 
                 tool_counts[name] += 1
                 tool_ok = result is not None and result.ok
@@ -262,11 +273,8 @@ def run_agent(
                     taxonomy_reads.append({"turn": turn, "path": str(args["path"]).lstrip("./")})
                 if name == "run_eval":
                     entry = {"turn": turn, "eval_number": len(eval_history) + 1, "kernel_writes_so_far": kernel_writes}
-                    try:
-                        parsed = json.loads(result_text)
-                    except json.JSONDecodeError:
-                        parsed = {}
-                    entry["status"] = parsed.get("status", "error")
+                    parsed = extract_result_json(result_text)
+                    entry["status"] = parsed.get("status", "unparsed")
                     entry["speedup"] = parsed.get("speedup_vs_baseline")
                     diag = parsed.get("diagnosis") or {}
                     entry["pct_of_roofline_limit"] = diag.get("pct_of_roofline_limit")

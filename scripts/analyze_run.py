@@ -13,9 +13,36 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from agent.harness import extract_result_json  # noqa: E402
+
 
 def load(path):
     return json.loads((path / "result.json").read_text())
+
+
+def evals_from_trajectory(run):
+    """Rebuild the evaluation history from trajectory.jsonl, so it stays correct even for
+    runs whose result.json recorded it with an older, weaker parser."""
+    history, writes, productive_turns = [], 0, set()
+    for line in (run / "trajectory.jsonl").read_text().splitlines():
+        e = json.loads(line)
+        if e["role"] != "tool":
+            continue
+        if e.get("turn_productive"):
+            productive_turns.add(e["turn"])
+        if e["name"] == "write_file" and e.get("kernel_snapshot"):
+            writes += 1
+        if e["name"] == "run_eval":
+            parsed = extract_result_json(e["output"])
+            diag = parsed.get("diagnosis") or {}
+            history.append({"turn": e["turn"], "eval_number": len(history) + 1, "kernel_writes_so_far": writes,
+                            "productive_turns_used": len(productive_turns),
+                            "status": parsed.get("status", "unparsed"), "speedup": parsed.get("speedup_vs_baseline"),
+                            "pct_of_roofline_limit": diag.get("pct_of_roofline_limit"),
+                            "workload_limit": diag.get("workload_limit"),
+                            "error": (str(parsed.get("error") or "")[:300] or None)})
+    return history
 
 
 def one_run(run):
@@ -31,14 +58,15 @@ def one_run(run):
     print("\nEVALUATIONS (progress)")
     print(f"{'#':>3} {'turn':>5} {'prod':>5} {'writes':>6}  {'status':<14}{'speedup':>8} {'%roofline':>10}  limit / error")
     best = None
-    for e in r.get("eval_history") or []:
+    r["eval_history"] = evals_from_trajectory(run)
+    for e in r["eval_history"]:
         sp = e.get("speedup")
         if e.get("status") == "correct" and sp is not None and (best is None or sp > best):
             best = sp
         tail = e.get("workload_limit") or (e.get("error") or "")[:70]
         print(f"{e['eval_number']:>3} {e['turn']:>5} {e.get('productive_turns_used', ''):>5} {e['kernel_writes_so_far']:>6}  "
               f"{str(e['status']):<14}{'' if sp is None else sp:>8} {'' if e.get('pct_of_roofline_limit') is None else e['pct_of_roofline_limit']:>10}  {tail}")
-    first = next((e for e in r.get("eval_history") or [] if e["status"] == "correct"), None)
+    first = next((e for e in r["eval_history"] if e["status"] == "correct"), None)
     if first is None:
         first_text = "never"
     else:
@@ -52,7 +80,7 @@ def one_run(run):
     if not reads:
         print("  none")
     files = r.get("taxonomy_files_read") or []
-    first_write = next((e["turn"] for e in r.get("eval_history") or []), None)
+    first_write = next((e["turn"] for e in r["eval_history"]), None)
     print(f"  unique files: {len(files)}; first evaluation at turn {first_write}")
 
     print("\nCOMPLIANCE")
