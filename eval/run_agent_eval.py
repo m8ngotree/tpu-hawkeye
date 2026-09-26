@@ -8,7 +8,8 @@ Every other setting is identical between conditions. The final kernel is re-scor
 independently of anything the agent reported: JAXBench correctness check plus timing
 against the JAXBench baseline.
 
-Runs that already have a result.json are skipped (--force to redo), so a crashed or
+Runs that already have a result.json are skipped unless they ended in a harness_error
+(--force redoes all), so a crashed or
 preempted sweep can simply be re-run.
 
 Requires LLM_API_KEY. --interpret scores on CPU (correctness only); omit it on a TPU.
@@ -34,7 +35,9 @@ def run_one(workload, condition, rep, args):
     record = {"workload": workload, "condition": condition, "rep": rep, "tag": args.tag}
     result_path = run_dir / "result.json"
     if result_path.exists() and not args.force:
-        return json.loads(result_path.read_text())
+        previous = json.loads(result_path.read_text())
+        if previous.get("status") != "harness_error":
+            return previous
     t0 = time.time()
     try:
         ws = build_workspace(
