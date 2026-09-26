@@ -21,7 +21,7 @@ from pathlib import Path
 
 from openai import OpenAI
 
-from agent.tools_exec import read_file, run_bash, write_file
+from agent.tools_exec import REJECTION, read_file, run_bash, write_file
 
 TOOL_SCHEMAS = [
     {
@@ -86,6 +86,7 @@ class AgentRunResult:
     turns_used: int
     stopped_reason: str  # 'done' | 'max_turns' | 'error'
     final_eval: dict | None = None
+    guard_rejections: int = 0
 
 
 def run_agent(
@@ -115,6 +116,7 @@ def run_agent(
     final_eval = None
     stopped_reason = "max_turns"
     turn = 0
+    guard_rejections = 0
 
     with open(trajectory_path, "w") as trajectory_file:
         for turn in range(1, max_turns + 1):
@@ -147,6 +149,8 @@ def run_agent(
                 else:
                     result = impl(workspace, **args)
                     result_text = result.output
+                    if result_text == REJECTION:
+                        guard_rejections += 1
                     if name == "run_bash" and '"correctness"' in result_text:
                         try:
                             final_eval = json.loads(result_text)
@@ -164,4 +168,5 @@ def run_agent(
         turns_used=turn,
         stopped_reason=stopped_reason,
         final_eval=final_eval,
+        guard_rejections=guard_rejections,
     )

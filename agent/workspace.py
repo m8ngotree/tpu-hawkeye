@@ -33,6 +33,8 @@ Score = TFLOPS / baseline_tflops (higher is better). Must pass correctness first
   real timing on TPU). Prints a JSON result and exits 0 iff correct.
 $taxonomy_section$kernel_pool_section
 ## Workflow
+Work only inside this directory; do not look for files elsewhere on the machine.
+
 1. Get a *correct* kernel first (interpret mode is enough for this -- no TPU needed).
 2. Profile on real TPU hardware (drop --interpret) and read the reported TFLOPS /
    utilization_pct.
@@ -61,6 +63,22 @@ KERNEL_POOL_SECTION_TEMPLATE = Template(
 )
 
 
+def _vendor_jaxbench(out_dir: Path, workload_name: str) -> None:
+    """Give the workspace a private copy of the JAXBench harness and ONLY this workload's
+    baseline, so eval.py needs nothing outside the workspace and the workspace contains no
+    reference to the repo, other workloads, or hand-tuned optimized.py kernels."""
+    src = JAXBENCH_BENCHMARKS.parent
+    dst = out_dir / "JAXBench"
+    (dst / "harness").mkdir(parents=True, exist_ok=True)
+    shutil.copy(src / "__init__.py", dst / "__init__.py")
+    for f in (src / "harness").glob("*.py"):
+        shutil.copy(f, dst / "harness" / f.name)
+    bench = dst / "benchmark"
+    (bench / workload_name).mkdir(parents=True, exist_ok=True)
+    shutil.copy(src / "benchmark" / "__init__.py", bench / "__init__.py")
+    shutil.copy(src / "benchmark" / workload_name / "baseline.py", bench / workload_name / "baseline.py")
+
+
 def build_workspace(
     workload_name: str,
     problem_type: str,
@@ -78,11 +96,8 @@ def build_workspace(
     """
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    eval_src = EVAL_PY.read_text().replace(
-        "sys.path.insert(0, str(Path(__file__).resolve().parent.parent))",
-        f"sys.path.insert(0, {str(REPO_ROOT)!r})",
-    )
-    (out_dir / "eval.py").write_text(eval_src)
+    shutil.copy(EVAL_PY, out_dir / "eval.py")
+    _vendor_jaxbench(out_dir, workload_name)
 
     shutil.copy(JAXBENCH_BENCHMARKS / workload_name / "baseline.py", out_dir / "baseline.py")
 

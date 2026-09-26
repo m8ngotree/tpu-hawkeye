@@ -12,11 +12,15 @@ Runs that already have a result.json are skipped unless they ended in a harness_
 (--force redoes all), so a crashed or
 preempted sweep can simply be re-run.
 
+Agent workspaces are built under --work-dir (default ~/hawkeye_work, outside the repo)
+and each run's trajectory, final kernel and result are copied to results/runs/.
+
 Requires LLM_API_KEY. --interpret scores on CPU (correctness only); omit it on a TPU.
 """
 
 import argparse
 import json
+import shutil
 import sys
 import time
 import traceback
@@ -32,6 +36,7 @@ from agent.workspace import build_workspace
 
 def run_one(workload, condition, rep, args):
     run_dir = ROOT / "results" / "runs" / args.tag / condition / f"{workload}_r{rep}"
+    work_dir = Path(args.work_dir).expanduser() / args.tag / condition / f"{workload}_r{rep}"
     record = {"workload": workload, "condition": condition, "rep": rep, "tag": args.tag}
     result_path = run_dir / "result.json"
     if result_path.exists() and not args.force:
@@ -43,7 +48,7 @@ def run_one(workload, condition, rep, args):
         ws = build_workspace(
             workload,
             problem_type=workload.split("_", 1)[1].replace("_", " "),
-            out_dir=run_dir,
+            out_dir=work_dir,
             use_taxonomy=(condition == "taxonomy"),
             use_kernel_pool=False,
         )
@@ -52,7 +57,8 @@ def run_one(workload, condition, rep, args):
                 ws, model=args.model, base_url=args.base_url,
                 api_key_env=args.api_key_env, max_turns=args.max_turns,
             )
-            record.update(turns_used=agent_res.turns_used, stopped_reason=agent_res.stopped_reason)
+            record.update(turns_used=agent_res.turns_used, stopped_reason=agent_res.stopped_reason,
+                          guard_rejections=agent_res.guard_rejections)
         final = run_kernel(
             workload, ws / "kernel.py", tpu="v5e", interpret=args.interpret,
             num_warmup=5, num_iters=50,
@@ -67,8 +73,11 @@ def run_one(workload, condition, rep, args):
         record.update(status="harness_error", error=f"{type(e).__name__}: {e}",
                       traceback=traceback.format_exc()[-800:])
     record["wall_s"] = round(time.time() - t0, 1)
-    (run_dir / "result.json").parent.mkdir(parents=True, exist_ok=True)
-    (run_dir / "result.json").write_text(json.dumps(record, indent=2))
+    run_dir.mkdir(parents=True, exist_ok=True)
+    for name in ("trajectory.jsonl", "kernel.py", "task_prompt.md"):
+        if (work_dir / name).exists():
+            shutil.copy(work_dir / name, run_dir / name)
+    result_path.write_text(json.dumps(record, indent=2))
     return record
 
 
@@ -84,6 +93,8 @@ def main():
     ap.add_argument("--interpret", action="store_true")
     ap.add_argument("--dry-run", action="store_true", help="skip the agent; score the empty starting kernel")
     ap.add_argument("--tag", default="run")
+    ap.add_argument("--work-dir", default="~/hawkeye_work",
+                    help="where agent workspaces are built; keep it outside the repo checkout")
     ap.add_argument("--force", action="store_true", help="redo runs that already have a result.json")
     args = ap.parse_args()
 
