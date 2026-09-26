@@ -22,17 +22,22 @@ from pathlib import Path
 
 from openai import OpenAI
 
-from agent.tools_exec import REJECTION, read_file, run_bash, write_file
+from agent.tools_exec import REJECTION, ToolResult, read_file, run_bash, write_file
 
 TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
             "name": "read_file",
-            "description": "Read a file's contents, path relative to the workspace root.",
+            "description": "Read a file's contents, path relative to the workspace root. "
+            "Optionally read only `limit` lines starting at line `offset` (0-based).",
             "parameters": {
                 "type": "object",
-                "properties": {"path": {"type": "string"}},
+                "properties": {
+                    "path": {"type": "string"},
+                    "offset": {"type": "integer"},
+                    "limit": {"type": "integer"},
+                },
                 "required": ["path"],
             },
         },
@@ -173,7 +178,10 @@ def run_agent(
                     result_text = f"unknown tool: {name}"
                 else:
                     t1 = time.time()
-                    result = impl(workspace, **args)
+                    try:
+                        result = impl(workspace, **args)
+                    except Exception as e:  # a bad tool call must not end the run
+                        result = ToolResult(ok=False, output=f"tool error: {type(e).__name__}: {e}")
                     tool_elapsed = time.time() - t1
                     tool_seconds += tool_elapsed
                     result_text = result.output

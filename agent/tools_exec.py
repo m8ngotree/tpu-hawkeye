@@ -35,12 +35,18 @@ def _resolve(workspace: Path, path: str) -> Path:
     return resolved
 
 
-def read_file(workspace: Path, path: str) -> ToolResult:
+def read_file(workspace: Path, path: str, offset: int = 0, limit: int | None = None) -> ToolResult:
+    """Read a file. `offset` (first line, 0-based) and `limit` (line count) are optional."""
     try:
         target = _resolve(workspace, path)
         if not target.exists():
             return ToolResult(ok=False, output=f"no such file: {path}")
-        return ToolResult(ok=True, output=target.read_text(errors="replace"))
+        text = target.read_text(errors="replace")
+        if offset or limit is not None:
+            lines = text.splitlines(keepends=True)
+            end = None if limit is None else int(offset) + int(limit)
+            text = "".join(lines[int(offset):end])
+        return ToolResult(ok=True, output=text)
     except WorkspaceEscapeError as e:
         return ToolResult(ok=False, output=str(e))
 
