@@ -67,12 +67,13 @@ _OUTSIDE_WORKSPACE = re.compile(
     r"|\$\{?HOME|\$\{?PWD/\.\."
     r"|/(home|root|Users|mnt|opt|srv|media)\b"  # locations outside the workspace
     r"|tpu-hawkeye|hawkeye_work"
+    r"|pallas[./]ops"                        # kernels shipped inside JAX are off limits
     r"|\bfind\s+/\s|\bls\s+/\s*$"
 )
 
 REJECTION = (
-    "Command rejected: it refers to a location outside your workspace. "
-    "Use only files in the current directory."
+    "Command rejected: it refers to a location outside your workspace, or to the kernels "
+    "shipped inside JAX (jax.experimental.pallas.ops). Use only files in the current directory."
 )
 
 

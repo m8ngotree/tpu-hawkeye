@@ -11,6 +11,7 @@ kernel is correct.
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -108,10 +109,14 @@ def main() -> None:
     parser.add_argument("--num-iters", type=int, default=50)
     args = parser.parse_args()
 
-    if "pallas_call" not in args.kernel.read_text():
-        result = {"workload": args.workload, "status": "rejected", "error": (
-            "kernel must implement its main computation with pl.pallas_call; "
-            "plain JAX is not accepted")}
+    source = args.kernel.read_text()
+    problem = None
+    if "pallas_call" not in source:
+        problem = "kernel must implement its main computation with pl.pallas_call; plain JAX is not accepted"
+    elif re.search(r"pallas[./]ops|pallas\s+import\s+ops", source):
+        problem = "kernel must not use the ready-made kernels in jax.experimental.pallas.ops"
+    if problem:
+        result = {"workload": args.workload, "status": "rejected", "error": problem}
         if (HERE / "JAXBench").exists():
             _record(result, args.kernel)
         print(json.dumps(result, indent=2))
