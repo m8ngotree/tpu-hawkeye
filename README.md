@@ -10,7 +10,7 @@ speedup that taxonomy buys over the same agent without it, on
 
 Two separate things write code here:
 
-1. **The taxonomy** -- 8 small, generic, hand-written unit-test cells (one per
+1. **The taxonomy** -- 7 small, generic, hand-written unit-test cells (one per
    recurring optimization technique: MXU feed, DMA pipelining, fused epilogue, etc.),
    per TPU generation. We write these. See [taxonomy/README.md](taxonomy/README.md).
 2. **The coding agent** -- a small hand-rolled tool-use loop (not the paper's own
@@ -40,7 +40,7 @@ The speedup delta is the result.
 
 ```
 taxonomy/
-  v5e/<NN>_<row_name>/        8 cells for the v5e generation (trimmed+adjusted from Hawkeye's 10 GPU rows -- see taxonomy/README.md)
+  v5e/<NN>_<row_name>/        7 cells for the v5e generation (adapted from Hawkeye's 10 GPU rows -- see taxonomy/README.md)
     naive_kernel.py             deliberately unoptimized -- establishes the floor
     optimized_kernel.py           the one hand-written expert example for this technique
     config.json                    which profiler counter proves the technique fired
@@ -72,7 +72,7 @@ results/                      run outputs + kernel_pool/ (gitignored except summ
 
 `runner.py`, `eval.py`, `tools_exec.py`, and `workspace.py` are implemented and
 verified end-to-end on CPU. `harness.py` is implemented but not yet exercised against
-a real LLM API call. **All 8 taxonomy cells are written and correctness-verified**
-(CPU/interpret mode only -- none verified on real TPU hardware yet). Next: rent a TPU
+a real LLM API call. **All 7 taxonomy cells compile, match their reference, and show a
+measurable naive-to-optimized gain on a real v5e chip.** Next: rent a TPU
 VM ([docs/running_on_tpu.md](docs/running_on_tpu.md)), verify the cells on hardware,
 smoke-test the agent loop, run a pilot, then the full sweep.

@@ -4,7 +4,7 @@ Follows Hawkeye's Table 3 / Appendix C.2 shape (rows = recurring optimization
 strategies, columns = hardware generations), but not its row count -- **10 wasn't a
 target to hit, it's just what fell out of the GPU study.** We trimmed to 7 rows that
 matter for the core (single-chip) JAXBench workloads, then added one back after
-actually reading all 50 JAXBench workloads and finding a real gap (`08_grouped_matmul`
+actually reading all 50 JAXBench workloads and finding a real gap (`07_grouped_matmul`
 -- see "Row provenance" below for the full trace of what got cut, added, and why.
 **We only have one column right now (`v5e/`)** -- a new generation later (`v5p/`,
 `v6e/`, ...) means adding a sibling directory with the same row names, not
@@ -15,7 +15,7 @@ JAXBench kernel. It exists so an agent that has never seen this TPU generation c
 learn the syntax and the profiler signature for one optimization in isolation, then
 compose several cells together itself when it goes to optimize a real workload.
 
-## The 8 rows, translated from Hawkeye's GPU taxonomy to Pallas/Mosaic/TPU
+## The 7 rows, translated from Hawkeye's GPU taxonomy to Pallas/Mosaic/TPU
 
 Directory names are final -- use these exactly when writing cells, they're what the
 agent will `ls`/`cat` to browse the taxonomy (see "How the agent finds a cell" below).
@@ -26,29 +26,31 @@ agent will `ls`/`cat` to browse the taxonomy (see "How the agent finds a cell" b
 | 2 | `02_vmem_tile_layout` | Shared Memory Layout | Block shapes: last two dims must be divisible by (8, 128) (violations are rejected at lowering); among legal shapes, larger blocks amortize per-step overhead |
 | 3 | `03_vectorized_vmem` | Vectorized Memory | Lane-aligned loads so the VPU doesn't fall back to scalar-core ops |
 | 4 | `04_async_pipeline` | Async Pipeline | `pltpu.emit_pipeline` / `make_async_copy`, multi-stage buffering -- direct analogue of TMA/cp.async |
-| 5 | `05_producer_consumer` | Producer/Consumer | Multi-stage buffering depth (2-stage vs. 3+-stage prefetch) -- how far ahead the DMA "producer" can run of the compute "consumer," distinct from `04_async_pipeline`'s on/off overlap toggle |
-| 6 | `06_fused_epilogue` | Epilogue Pipeline | Fusing bias/activation/norm into the same kernel instead of separate ops (fewer HBM round trips) |
-| 7 | `07_lane_reduction` | Warp/Wave Reduction | Reductions that map to native cross-lane ops instead of naive loops, including cumulative reductions (`jnp.cumsum`) |
-| 8 | `08_grouped_matmul` | *(no direct Hawkeye row -- see provenance below)* | Per-step operand selected by a runtime index array via scalar prefetch (`PrefetchScalarGridSpec`), instead of keeping every candidate VMEM-resident |
+| 5 | `05_fused_epilogue` | Epilogue Pipeline | Fusing bias/activation/norm into the same kernel instead of separate ops (fewer HBM round trips) |
+| 6 | `06_lane_reduction` | Warp/Wave Reduction | Reductions that map to native cross-lane ops instead of naive loops, including cumulative reductions (`jnp.cumsum`) |
+| 7 | `07_grouped_matmul` | *(no direct Hawkeye row -- see provenance below)* | Per-step operand selected by a runtime index array via scalar prefetch (`PrefetchScalarGridSpec`), instead of keeping every candidate VMEM-resident |
 
 ## Row provenance
 
-Cut two Hawkeye rows, folded one in, and added one that Hawkeye doesn't have at all
+Cut four Hawkeye rows and added one that Hawkeye doesn't have at all
 (found by actually reading all 50 JAXBench workloads, not guessed in advance):
 
 - **Quantized Precision** (Hawkeye's int8/fp8 cascade row) -- dropped for now. Most
   JAXBench workloads run bf16; quantization is a real technique but a secondary
-  concern for a first taxonomy-vs-no-taxonomy result. Add back as `09_precision_cascade`
+  concern for a first taxonomy-vs-no-taxonomy result. Add back as `08_precision_cascade`
   if/when low-precision workloads become a focus.
 - **Multi-Unit Coordination** (ICI collectives across the 8 v5e-8 chips) -- dropped.
   Only matters for sharded multi-chip workloads, which is a small slice of JAXBench's
-  50 (mostly single-op, single-chip) tasks. Add back as `09_ici_collective` if a
+  50 (mostly single-op, single-chip) tasks. Add back as `08_ici_collective` if a
   sharded workload actually needs it.
-- **Persistent Scheduling** -- folded into `05_producer_consumer` rather than kept
-  separate. On v5e (no megacore split, unlike v4/v5p), persistent-grid scheduling and
-  producer/consumer overlap are close enough in practice that a separate cell would
-  mostly repeat the same DMA-prefetch content.
-- **`08_grouped_matmul` -- added.** Read all 50 JAXBench workloads (not just the
+- **Producer/Consumer** -- dropped after measurement. Its TPU translation was buffer
+  depth (`pl.Buffered(buffer_count=N)`). A sweep on v5e over block sizes 8-512 and depths
+  2/3/4, for a pure-copy (DMA-bound) and an arithmetic body, gave identical device time
+  at every depth (block size dominated), so there was no effect to teach. The finding is
+  recorded in `04_async_pipeline`'s guide.
+- **Persistent Scheduling** -- dropped along with it: on v5e (no megacore split) it
+  overlapped with the pipelining rows and had no distinct effect to demonstrate.
+- **`07_grouped_matmul` -- added.** Read all 50 JAXBench workloads (not just the
   17 "priority" ones) to check whether the 7-row set actually covers them. It mostly
   does -- standard/GQA/MLA/Flex/Sparse attention, GEMM, SwiGLU, RMSNorm, Triangle
   Multiplication, and the ~33 fused elementwise/GEMM/conv chains all map cleanly onto
@@ -147,6 +149,6 @@ the cross-workload reuse Hawkeye describes in Appendix E.3.1.
 
 ## Status
 
-All 8 cells are written; each has been checked for numerical correctness against a
-reference under `interpret=True` on CPU. Throughput claims have not yet been measured
-on v5e hardware.
+All 7 cells are written. Each compiles on a real v5e chip, matches its naive counterpart
+numerically, and shows a measurable device-time gain (naive to optimized) at its
+chosen problem size.

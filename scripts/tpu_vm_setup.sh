@@ -14,7 +14,7 @@ cd tpu-hawkeye
 python3 -m venv .venv-tpu || { sudo apt-get update -y && sudo apt-get install -y python3-venv && python3 -m venv .venv-tpu; }
 source .venv-tpu/bin/activate
 pip install -U pip
-pip install -U "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+pip install -U "jax[tpu]==0.6.2" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 pip install numpy openai
 
 python - <<'PY'

@@ -21,6 +21,14 @@ automatic double-buffered overlap.
 preferable to hand-written `pltpu.make_async_copy` plus semaphores unless finer
 control is required.
 
+## Buffer depth
+
+`pl.BlockSpec(..., pipeline_mode=pl.Buffered(buffer_count=N))` sets the number of
+buffers for an operand (default 2). For streaming elementwise and copy kernels on v5e,
+buffer counts of 2, 3 and 4 produced the same device time; block size
+(`02_vmem_tile_layout`) had the dominant effect. `buffer_count > 2` is supported on
+inputs only, not outputs.
+
 ## Running without a TPU device
 
 `emit_pipeline` queries TPU device information (tiling factors, generation) even
@@ -43,5 +51,4 @@ with jax.sharding.use_abstract_mesh(abstract_mesh):
 Correct output with time that does not scale with FLOP count, particularly on
 memory-heavy kernels (large tensors, low arithmetic intensity), suggests DMA stalls.
 If the kernel is a matmul not reaching the MXU, see `01_mxu_feed`. If DMA is
-overlapped but block shapes waste VMEM, see `02_vmem_tile_layout`. If overlap is
-enabled but DMA still stalls compute, see `05_producer_consumer`.
+overlapped but block shapes are undersized, see `02_vmem_tile_layout`.

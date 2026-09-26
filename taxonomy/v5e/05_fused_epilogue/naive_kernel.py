@@ -1,4 +1,4 @@
-"""Taxonomy cell 06_fused_epilogue -- NAIVE variant.
+"""Taxonomy cell 05_fused_epilogue -- NAIVE variant.
 
 Computes `relu(A @ B + bias)` as TWO pallas_calls: one for the matmul, one for the
 bias add and ReLU. The (2048, 1024) float32 matmul result (8 MB) is written to HBM by

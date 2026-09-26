@@ -1,4 +1,4 @@
-"""Taxonomy cell 06_fused_epilogue -- OPTIMIZED (expert) variant.
+"""Taxonomy cell 05_fused_epilogue -- OPTIMIZED (expert) variant.
 
 Computes the identical `relu(A @ B + bias)` as ONE pallas_call: the bias add and ReLU
 are applied right after the matmul, while each (256, 1024) result block is still in

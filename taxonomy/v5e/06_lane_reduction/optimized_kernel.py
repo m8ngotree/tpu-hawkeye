@@ -1,4 +1,4 @@
-"""Taxonomy cell 07_lane_reduction -- OPTIMIZED (expert) variant.
+"""Taxonomy cell 06_lane_reduction -- OPTIMIZED (expert) variant.
 
 Identical row-sum, computed with `jnp.sum(x_ref[:, :], axis=1)` -- one native
 cross-lane reduction instruction instead of naive_kernel.py's 128 single-lane

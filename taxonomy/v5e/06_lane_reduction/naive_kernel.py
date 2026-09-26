@@ -1,4 +1,4 @@
-"""Taxonomy cell 07_lane_reduction -- NAIVE variant.
+"""Taxonomy cell 06_lane_reduction -- NAIVE variant.
 
 Row-sum of a 128x128 bf16 array (`y[i, 0] = sum_j x[i, j]`) via a Python for-loop that
 reads one lane (column) at a time and accumulates in a running scalar-per-row sum --
