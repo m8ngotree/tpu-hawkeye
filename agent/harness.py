@@ -118,25 +118,16 @@ class AgentRunResult:
 _TAXONOMY_FILE = re.compile(r"taxonomy/[\w./*-]+\.(?:py|md|json)")
 
 
-def _productive_actions(name: str, args: dict, seen_taxonomy: set) -> bool:
+def _productive_actions(name: str, args: dict) -> bool:
     """Whether one tool call is a 'productive' action, as Hawkeye counts turns: a kernel edit,
-    an evaluation, or the first read of a taxonomy file. Listings, greps, library source and
-    other exploration are free. `seen_taxonomy` is updated so re-reading a file is free."""
-    if name == "write_file":
-        return str(args.get("path", "")).strip("./") == "kernel.py"
+    an evaluation, or a taxonomy read. Every taxonomy read counts, repeats included (the paper
+    deduplicates only kernel-pool reads). Listings and reads of other files are free."""
     if name == "run_eval":
         return True
-    if name == "run_bash":
-        command = str(args.get("command", ""))
-        paths = set(_TAXONOMY_FILE.findall(command))
-        new = paths - seen_taxonomy
-        seen_taxonomy |= paths
-        return "eval.py" in command or bool(new)
+    if name == "write_file":
+        return str(args.get("path", "")).strip("./") == "kernel.py"
     if name == "read_file":
-        path = str(args.get("path", "")).lstrip("./")
-        if _TAXONOMY_FILE.fullmatch(path) and path not in seen_taxonomy:
-            seen_taxonomy.add(path)
-            return True
+        return bool(_TAXONOMY_FILE.fullmatch(str(args.get("path", "")).lstrip("./")))
     return False
 
 
@@ -171,7 +162,6 @@ def run_agent(
     final_eval = None
     stopped_reason = "max_raw_turns"
     productive_turns = 0
-    seen_taxonomy: set = set()
     tool_counts: Counter = Counter()
     tool_errors = path_escape_attempts = kernel_writes = 0
     taxonomy_reads: list = []
@@ -232,7 +222,7 @@ def run_agent(
             for tool_call in message.tool_calls:
                 name = tool_call.function.name
                 args = json.loads(tool_call.function.arguments or "{}")
-                if _productive_actions(name, args, seen_taxonomy):
+                if _productive_actions(name, args):
                     turn_productive = True
                 impl = TOOL_IMPLS.get(name)
 

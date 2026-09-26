@@ -299,8 +299,8 @@ in `tools_exec.py` but are not exposed.
 3. If the reply has tool calls, execute each, append results as tool messages, repeat.
 4. Stop when the model replies without tool calls, when the productive-turn budget is used up
    (default 50), or at a raw-call safety cap (default 200). A turn is **productive**, as in
-   Hawkeye, if it edits `kernel.py`, calls `run_eval`, or reads a taxonomy file for the first time;
-   listings and other file reads are free.
+   Hawkeye, if it edits `kernel.py`, calls `run_eval`, or reads a taxonomy file (every read counts, repeats included, as in the
+   paper); listings and reads of other files are free.
 
 Every turn, the **entire** message list is re-sent. So files the agent has read stay in its
 context for the rest of the run (and are paid for again as input tokens each turn); nothing
