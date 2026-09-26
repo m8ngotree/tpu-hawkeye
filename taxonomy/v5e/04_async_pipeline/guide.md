@@ -48,7 +48,8 @@ with jax.sharding.use_abstract_mesh(abstract_mesh):
 
 ## Diagnosis
 
-Correct output with time that does not scale with FLOP count, particularly on
-memory-heavy kernels (large tensors, low arithmetic intensity), suggests DMA stalls.
+`workload_limit` reported as memory-bound with `hbm_bandwidth_pct_of_peak` well below
+100 (time that does not scale with FLOP count, on large tensors with low arithmetic
+intensity) suggests DMA stalls.
 If the kernel is a matmul not reaching the MXU, see `01_mxu_feed`. If DMA is
 overlapped but block shapes are undersized, see `02_vmem_tile_layout`.

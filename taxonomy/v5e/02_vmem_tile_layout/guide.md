@@ -26,6 +26,8 @@ them as large as VMEM allows.
 ## Diagnosis
 
 A grid step count much larger than the problem size warrants
-(`M // block_m * N // block_n`) indicates undersized blocks. If the step count is
+(`M // block_m * N // block_n`) indicates undersized blocks; it shows up as
+`pct_of_roofline_limit` well below 100 regardless of whether `workload_limit` is
+compute- or memory-bound. If the step count is
 reasonable and the kernel is a compute-bound matmul, see `01_mxu_feed`. If it is bound
 on HBM<->VMEM transfer time rather than per-step overhead, see `04_async_pipeline`.

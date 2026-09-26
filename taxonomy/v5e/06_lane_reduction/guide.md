@@ -21,6 +21,6 @@ file's `__main__` block reports `num_reduce_ops` (128 versus 1).
 
 ## Diagnosis
 
-Low throughput on a kernel that reduces along an axis: check whether the reduction is
-written as a loop. For matmul-shaped work see `01_mxu_feed`; for non-reducing
+`pct_of_roofline_limit` well below 100 on a kernel that reduces along an axis: check
+whether the reduction is written as a loop. For matmul-shaped work see `01_mxu_feed`; for non-reducing
 elementwise work see `03_vectorized_vmem`.

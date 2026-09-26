@@ -41,6 +41,6 @@ This cell's example is a single 128x128x128 problem and demonstrates only the
 
 ## Diagnosis
 
-Low reported utilization on matmul-shaped work with correct output points here first.
-If utilization is reasonable but the kernel spends its time waiting on HBM->VMEM
-transfers, see `04_async_pipeline`.
+`workload_limit` reported as compute-bound with `mxu_pct_of_peak` far below 100 on
+matmul-shaped work with correct output points here first. If `workload_limit` is
+memory-bound and `hbm_bandwidth_pct_of_peak` is low, see `04_async_pipeline`.

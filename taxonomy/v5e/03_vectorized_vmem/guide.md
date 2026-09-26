@@ -26,6 +26,7 @@ independent; a well-tiled block can still be processed with a scalar loop.
 
 ## Diagnosis
 
-Low throughput on an elementwise kernel with no matmul: check the kernel body for
-Python loops over an array dimension. For matmul-shaped work see `01_mxu_feed`; for
+`workload_limit` reported as memory-bound with `hbm_bandwidth_pct_of_peak` low on an
+elementwise kernel with no matmul: check the kernel body for Python loops over an
+array dimension. For matmul-shaped work see `01_mxu_feed`; for
 reductions along an axis see `06_lane_reduction`.

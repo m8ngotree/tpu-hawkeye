@@ -29,5 +29,7 @@ output), it must be materialized and fusing it away is not possible.
 ## Diagnosis
 
 A kernel file with several `pallas_call`s (or `pallas_call`s interleaved with `jnp`
-ops) whose intermediates are not reused is a candidate. If the matmul itself is slow
+ops) whose intermediates are not reused is a candidate. Intermediates written to and
+read back from HBM are not counted in `min_hbm_traffic_mb`, so they appear as
+`pct_of_roofline_limit` well below 100. If the matmul itself is slow
 independent of fusion, address `01_mxu_feed` first.
