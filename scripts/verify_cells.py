@@ -16,6 +16,8 @@ from pathlib import Path
 
 import numpy as np
 
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")  # silence profiler import warnings
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "external" / "accelerator-agents"))
 CELLS = ROOT / "taxonomy" / "v5e"
