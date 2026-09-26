@@ -50,13 +50,13 @@ taxonomy/
 agent/
   runner.py                    tool: evaluate_kernel (compile, correctness, benchmark) -- done
   tools_exec.py                 the 3 tools given to the agent LLM: read_file, write_file, run_bash -- done
-  harness.py                    the tool-use loop itself (OpenAI-compatible API, e.g. DeepSeek) -- done, unverified against a real API call
+  harness.py                    the tool-use loop itself (OpenAI-compatible API, e.g. DeepSeek) -- done
   workspace.py                   builds the per-run agent workspace (task prompt, eval.py, taxonomy/, kernel_pool/) -- done
   profiler.py                    tool: deeper profiler counters -- stub
   tools.py                       our-side helpers: read_taxonomy_cell, kernel_pool_read/write -- done
 
 eval/
-  run_agent_eval.py            run the agent per workload and condition (taxonomy / none), re-score the final kernel
+  run_agent_eval.py            run the agent per workload and condition (taxonomy / none), re-score the final kernel -- done
   eval.py                       CLI the agent runs: `python eval.py --workload X --kernel kernel.py` -- done, verified
   smoke_test.py + smoke_kernels/  plumbing check for runner.py (no TPU needed) -- passing
 
@@ -70,9 +70,8 @@ results/                      run outputs + kernel_pool/ (gitignored except summ
 
 ## Status
 
-`runner.py`, `eval.py`, `tools_exec.py`, and `workspace.py` are implemented and
-verified end-to-end on CPU. `harness.py` is implemented but not yet exercised against
-a real LLM API call. **All 7 taxonomy cells compile, match their reference, and show a
-measurable naive-to-optimized gain on a real v5e chip.** Next: rent a TPU
-VM ([docs/running_on_tpu.md](docs/running_on_tpu.md)), verify the cells on hardware,
-smoke-test the agent loop, run a pilot, then the full sweep.
+The taxonomy (7 cells), the agent harness, the evaluation CLI, the runner and the analysis
+scripts are implemented and have been exercised on a real v5e chip. Only preliminary runs
+exist so far; the full taxonomy-vs-no-taxonomy sweep is pending. For a complete
+walkthrough of every part of the codebase, read
+[docs/codebase_overview.md](docs/codebase_overview.md).
