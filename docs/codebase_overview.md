@@ -362,7 +362,7 @@ untouched baseline copy).
 
 ### 7.5 Runner behavior
 
-Arguments: `--workloads` (space-separated names), `--conditions taxonomy none`, `--reps`,
+Arguments: `--workloads` (comma-separated names), `--conditions taxonomy none`, `--reps`,
 `--max-turns`, `--model`, `--base-url`, `--api-key-env`, `--tag`, `--work-dir`, `--quiet`,
 `--dry-run`, `--interpret`, `--force`. Runs that already have a `result.json` are skipped
 (except `harness_error` ones, which are retried), so an interrupted or preempted sweep can
