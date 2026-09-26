@@ -165,6 +165,86 @@ def _pallas_audit(kernel_path: Path, workload: str) -> dict | None:
     }
 
 
+def _perturb_inputs(inputs):
+    """A second, equally valid input set: any 2-D integer input that is a permutation of
+    range(size) (a page table, for instance) is replaced by a random permutation. A kernel
+    that relies on the exact values create_inputs() happens to produce then gives wrong output.
+    Returns None if there is nothing to perturb."""
+    import numpy as np
+    import jax.numpy as jnp
+
+    rng = np.random.default_rng(12345)
+    changed, out = False, []
+    for x in inputs:
+        arr = np.asarray(x) if hasattr(x, "dtype") and hasattr(x, "shape") else None
+        if (arr is not None and arr.ndim == 2 and np.issubdtype(arr.dtype, np.integer)
+                and np.array_equal(np.sort(arr.ravel()), np.arange(arr.size))):
+            out.append(jnp.asarray(rng.permutation(arr.size).reshape(arr.shape).astype(arr.dtype)))
+            changed = True
+        else:
+            out.append(x)
+    return tuple(out) if changed else None
+
+
+def _scale_check(ref, test, fraction=0.02):
+    """Error relative to the size of the output: max|diff| must be within `fraction` of
+    max|ref|. The harness tolerance (atol 1e-2) is absolute, so it cannot reject a wrong
+    kernel when the reference output itself is tiny."""
+    import jax
+    import numpy as np
+
+    worst = 0.0
+    for r, t in zip(jax.tree.leaves(ref), jax.tree.leaves(test)):
+        r = np.asarray(r, dtype=np.float32)
+        t = np.asarray(t, dtype=np.float32)
+        scale = float(np.max(np.abs(r)))
+        diff = float(np.max(np.abs(r - t)))
+        if scale > 0:
+            worst = max(worst, diff / scale)
+        elif diff > 0:
+            return False, float("inf")
+    return worst <= fraction, worst
+
+
+def _robustness(kernel_path: Path, workload: str) -> str | None:
+    """Extra correctness checks on top of the harness's: (1) error relative to output scale on
+    the standard inputs; (2) the standard comparison and the scale check on perturbed inputs.
+    Returns a reason string if the kernel fails, else None. Skipped if it cannot be run."""
+    try:
+        import jax
+        import jax.numpy as jnp
+        import JAXBench
+        from JAXBench.harness.correctness import check_correctness
+        from JAXBench.harness.loader import load_module
+
+        base_path = Path(JAXBench.__file__).parent / "benchmark" / workload / "baseline.py"
+        base = load_module(str(base_path), f"{workload}.robust_base")
+        kernel = load_module(str(kernel_path), "robust_kernel")
+        create = base.create_inputs
+        inputs = create(dtype=jnp.bfloat16) if "dtype" in create.__code__.co_varnames else create()
+        inputs = inputs if isinstance(inputs, (list, tuple)) else (inputs,)
+
+        def run(mod, args):
+            fn = mod.workload if getattr(mod, "_skip_jit", False) else jax.jit(mod.workload)
+            return jax.block_until_ready(fn(*args))
+
+        ok, err = _scale_check(run(base, inputs), run(kernel, inputs))
+        if not ok:
+            return f"error is {err:.1%} of the output's magnitude on the standard inputs (limit 2%)"
+        other = _perturb_inputs(inputs)
+        if other is not None:
+            ref, out = run(base, other), run(kernel, other)
+            if not check_correctness(ref, out)["correct"]:
+                return "output is wrong when the integer index inputs are a different valid permutation"
+            ok, err = _scale_check(ref, out)
+            if not ok:
+                return (f"output is wrong for a different valid index permutation "
+                        f"(error {err:.1%} of the output's magnitude)")
+    except Exception:  # noqa: BLE001 - a check that cannot run must not fail an evaluation
+        return None
+    return None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workload", required=True, help="JAXBench workload name, e.g. 12p_RMSNorm")
@@ -210,6 +290,11 @@ def main() -> None:
     )
     if audit is not None:
         result["pallas_check"] = audit
+    if result.get("status") == "correct":
+        reason = _robustness(args.kernel, args.workload)
+        if reason:
+            result["status"] = "incorrect"
+            result["correctness"] = {"correct": False, "reason": reason}
     if result.get("status") == "correct":
         diagnosis = _diagnosis(result, args.workload, args.tpu)
         if diagnosis:

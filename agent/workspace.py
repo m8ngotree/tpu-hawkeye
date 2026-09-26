@@ -56,6 +56,12 @@ $taxonomy_section$kernel_pool_section
 - Correctness: your output must match `baseline.py`'s output for the same inputs, elementwise,
   within `atol = rtol = 1e-2` (outputs are compared in float32; shapes and the number of outputs
   must match).
+- Generality: the kernel must be correct for any valid values of the inputs of these shapes
+  and dtypes, not only the values `create_inputs()` produces. In particular, index or page
+  tables and length arrays can be arbitrary valid values; do not assume the specific values
+  `baseline.py` happens to generate. Correctness is also checked on a second, differently
+  valued input set, and the error is checked against the size of the output as well as
+  against the absolute tolerance.
 - Timing: median device time over 50 timed iterations after 5 warmup iterations, measured with
   the device profiler; speedup = baseline time / kernel time.
 
