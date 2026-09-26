@@ -5,88 +5,104 @@
     "01_mxu_feed": {
       "naive": {
         "status": "ok",
-        "median_ms": 0.05920801777392626
+        "median_ms": 0.0585,
+        "timing_method": "wall_clock_fallback"
       },
       "optimized": {
         "status": "ok",
-        "median_ms": 0.07337506394833326
+        "median_ms": 0.0657,
+        "timing_method": "wall_clock_fallback"
       },
       "outputs_match": true
     },
     "02_vmem_tile_layout": {
       "naive": {
         "status": "ok",
-        "median_ms": 3.1587498961016536
+        "median_ms": 133.2989,
+        "timing_method": "wall_clock_fallback"
       },
       "optimized": {
         "status": "ok",
-        "median_ms": 0.47558301594108343
+        "median_ms": 1.4786,
+        "timing_method": "wall_clock_fallback"
       },
       "outputs_match": true
     },
     "03_vectorized_vmem": {
       "naive": {
         "status": "ok",
-        "median_ms": 1.205500098876655
+        "median_ms": 1.2223,
+        "timing_method": "wall_clock_fallback"
       },
       "optimized": {
         "status": "ok",
-        "median_ms": 0.042750034481287
+        "median_ms": 0.0297,
+        "timing_method": "wall_clock_fallback"
       },
       "outputs_match": true
     },
     "04_async_pipeline": {
       "naive": {
         "status": "ok",
-        "median_ms": 0.13683398719877005
+        "median_ms": 0.3183,
+        "timing_method": "wall_clock_fallback"
       },
       "optimized": {
         "status": "ok",
-        "median_ms": 0.1687499461695552
+        "median_ms": 1.2911,
+        "timing_method": "wall_clock_fallback"
       },
       "outputs_match": true
     },
     "05_producer_consumer": {
       "naive": {
         "status": "ok",
-        "median_ms": 0.21249998826533556
+        "median_ms": 0.212,
+        "timing_method": "wall_clock_fallback"
       },
       "optimized": {
         "status": "ok",
-        "median_ms": 0.2692500129342079
+        "median_ms": 0.2601,
+        "timing_method": "wall_clock_fallback"
       },
       "outputs_match": true
     },
     "06_fused_epilogue": {
       "naive": {
         "status": "ok",
-        "median_ms": 0.09945803321897984
+        "median_ms": 0.0933,
+        "timing_method": "wall_clock_fallback"
       },
       "optimized": {
         "status": "ok",
-        "median_ms": 0.08950009942054749
+        "median_ms": 0.0938,
+        "timing_method": "wall_clock_fallback"
       },
       "outputs_match": true
     },
     "07_lane_reduction": {
       "naive": {
         "status": "ok",
-        "median_ms": 0.03195903263986111
+        "median_ms": 0.0305,
+        "timing_method": "wall_clock_fallback"
       },
       "optimized": {
         "status": "ok",
-        "median_ms": 0.0061659375205636024
+        "median_ms": 0.0055,
+        "timing_method": "wall_clock_fallback"
       },
       "outputs_match": true
     },
     "08_grouped_matmul": {
       "naive": {
         "status": "ok",
-        "median_ms": 0.06874999962747097
+        "median_ms": 0.0727,
+        "timing_method": "wall_clock_fallback"
       },
       "optimized": {
         "status": "ok",
-        "median_ms": 0.07912504952400923
+        "median_ms": 0.081,
+        "timing_method": "wall_clock_fallback"
       },
       "outputs_match": true
     }

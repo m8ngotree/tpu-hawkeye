@@ -1,6 +1,6 @@
 """Taxonomy cell 07_lane_reduction -- NAIVE variant.
 
-Row-sum of a 128x128 bf16 array (`y[i] = sum_j x[i, j]`) via a Python for-loop that
+Row-sum of a 128x128 bf16 array (`y[i, 0] = sum_j x[i, j]`) via a Python for-loop that
 reads one lane (column) at a time and accumulates in a running scalar-per-row sum --
 128 separate single-lane reads plus 128 adds, instead of one reduction instruction.
 Same failure mode as `03_vectorized_vmem`, specific to reductions: Mosaic has a
@@ -32,10 +32,10 @@ def create_inputs(dtype=jnp.bfloat16):
 
 def _kernel(x_ref, o_ref):
     N = x_ref.shape[1]
-    acc = jnp.zeros((x_ref.shape[0],), dtype=jnp.float32)
+    acc = jnp.zeros((x_ref.shape[0], 1), dtype=jnp.float32)
     for j in range(N):
-        acc = acc + x_ref[:, j].astype(jnp.float32)
-    o_ref[:] = acc.astype(o_ref.dtype)
+        acc = acc + x_ref[:, j : j + 1].astype(jnp.float32)
+    o_ref[:, :] = acc
 
 
 def workload(X):
@@ -43,7 +43,7 @@ def workload(X):
     M = CONFIG["M"]
     return pl.pallas_call(
         _kernel,
-        out_shape=jax.ShapeDtypeStruct((M,), jnp.float32),
+        out_shape=jax.ShapeDtypeStruct((M, 1), jnp.float32),
         interpret=interpret,
     )(X)
 

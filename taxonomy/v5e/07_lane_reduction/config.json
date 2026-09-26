@@ -16,6 +16,5 @@
         "direction": "higher_is_better"
       }
     ]
-  },
-  "notes": "Also applies to cumulative reductions (jnp.cumsum): use the vectorized primitive rather than a manual loop."
+  }
 }

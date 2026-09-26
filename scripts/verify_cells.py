@@ -1,4 +1,4 @@
-"""Run every taxonomy cell's naive and optimized kernel and report status/timing.
+"""Run every taxonomy cell's naive and optimized kernel and report status/timing (device-side when the profiler provides it).
 
     python scripts/verify_cells.py              # real hardware (TPU if present)
     python scripts/verify_cells.py --interpret  # CPU interpreter
@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "external" / "accelerator-agents"))
 CELLS = ROOT / "taxonomy" / "v5e"
 
 
@@ -31,18 +32,17 @@ def run_variant(path, name, iters):
     import jax
 
     try:
+        from JAXBench.harness.profiler import benchmark_fn
+
         mod = load(path, name)
         inputs = mod.create_inputs()
-        fn = jax.jit(mod.workload)
-        out = np.asarray(fn(*inputs), dtype=np.float32)
-        for _ in range(3):
-            fn(*inputs).block_until_ready()
-        times = []
-        for _ in range(iters):
-            t0 = time.perf_counter()
-            fn(*inputs).block_until_ready()
-            times.append(time.perf_counter() - t0)
-        return {"status": "ok", "median_ms": float(np.median(times)) * 1000}, out
+        bench = benchmark_fn(mod.workload, inputs, num_warmup=5, num_iters=iters, label=name)
+        out = np.asarray(bench["output"], dtype=np.float32)
+        return {
+            "status": "ok",
+            "median_ms": bench["median_ms"],
+            "timing_method": bench["timing_method"],
+        }, out
     except Exception as e:
         return {"status": "error", "error": f"{type(e).__name__}: {str(e)[:300]}"}, None
 
@@ -58,6 +58,7 @@ def main():
 
     devices = str(jax.devices())
     print("devices:", devices)
+    print("jax", jax.__version__)
     results = {"devices": devices, "interpret": args.interpret, "cells": {}}
 
     for cell in sorted(p for p in CELLS.iterdir() if p.is_dir()):
@@ -76,7 +77,7 @@ def main():
     print(f"\n{'cell':<24}{'naive':>16}{'optimized':>16}{'speedup':>10}  match")
     for name, e in results["cells"].items():
         def fmt(v):
-            return f"{v['median_ms']:.3f} ms" if v["status"] == "ok" else "ERROR"
+            return f"{v['median_ms'] * 1000:.1f} us" if v["status"] == "ok" else "ERROR"
         n, o = e["naive"], e["optimized"]
         sp = f"{n['median_ms'] / o['median_ms']:.2f}x" if n["status"] == o["status"] == "ok" else "-"
         print(f"{name:<24}{fmt(n):>16}{fmt(o):>16}{sp:>10}  {e.get('outputs_match', '-')}")

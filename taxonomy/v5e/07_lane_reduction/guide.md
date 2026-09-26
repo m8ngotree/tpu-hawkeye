@@ -11,18 +11,13 @@ same result but bypasses that path.
 ## Rule
 
 Use `jnp.sum(x, axis=...)` (or `jnp.max`, `jnp.mean`, ...) over the whole array or
-block instead of looping over the reduction axis.
+block instead of looping over the reduction axis. Keep the result 2-D
+(`keepdims=True`, output shape `(M, 1)`): Mosaic does not support the 1-D layout
+conversion that a plain `(M,)` result requires and fails to compile.
 
-`naive_kernel.py` runs `for j in range(N): acc = acc + x_ref[:, j]`, 128 single-lane
+`naive_kernel.py` runs `for j in range(N): acc = acc + x_ref[:, j:j+1]`, 128 single-lane
 accumulation steps; `optimized_kernel.py` runs `jnp.sum(x_ref[:, :], axis=1)`. Each
 file's `__main__` block reports `num_reduce_ops` (128 versus 1).
-
-## Running (cumulative) reductions
-
-`jnp.cumsum(x, axis=...)` computes a value per position that accumulates everything
-up to that position, rather than one final value. The same principle applies: use the
-vectorized primitive rather than a manual loop of running sums. `jnp.cumsum` lowers
-inside a Pallas kernel like `jnp.sum` does.
 
 ## Diagnosis
 

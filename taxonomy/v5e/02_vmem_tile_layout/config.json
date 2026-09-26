@@ -1,14 +1,14 @@
 {
   "cell_name": "vmem_tile_layout",
-  "task_description": "Elementwise y = x*scale + bias over a 256x256 bf16 array with a block shape violating the (8,128) block-shape rule versus one satisfying it.",
+  "task_description": "Elementwise y = x*scale + bias over a 1024x1024 bf16 array with the smallest legal block (8,128) versus a large block (128,1024).",
   "profiling": {
     "metrics": [
       {
         "name": "num_grid_steps",
-        "description": "Total pallas_call grid steps for the same array. Determined by block shape.",
+        "description": "Total pallas_call grid steps for the same array. Determined by block shape; each step carries fixed overhead.",
         "direction": "lower_is_better",
-        "expected_naive": 256,
-        "expected_optimized": 16
+        "expected_naive": 1024,
+        "expected_optimized": 8
       },
       {
         "name": "achieved_tflops_pct_of_peak_bf16",

@@ -1,9 +1,10 @@
 """Taxonomy cell 02_vmem_tile_layout -- OPTIMIZED (expert) variant.
 
 Same math and output shape as naive_kernel.py; only the block shape changes, from
-(4, 64) to (32, 128). (32, 128) satisfies the Pallas TPU block-shape rule (last two
-dimensions divisible by 8 and 128), so no per-block padding is needed, and the grid
-has 16 steps instead of 256.
+(8, 128) to (128, 1024). Both satisfy the Pallas TPU block-shape rule (last two
+dimensions divisible by 8 and 128), but the larger block amortizes the per-step
+overhead over 128x more data: 8 grid steps instead of 1024. Blocks are limited by VMEM
+capacity, and double-buffered input plus output blocks must fit.
 """
 
 import os
@@ -14,10 +15,10 @@ from jax.experimental import pallas as pl
 
 CONFIG = {
     "name": "vmem_tile_layout_optimized",
-    "M": 256,
-    "N": 256,
-    "block_m": 32,
-    "block_n": 128,
+    "M": 1024,
+    "N": 1024,
+    "block_m": 128,
+    "block_n": 1024,
     "scale": 2.0,
     "bias": 0.5,
 }

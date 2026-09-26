@@ -26,7 +26,7 @@ def create_inputs(dtype=jnp.bfloat16):
 
 
 def _kernel(x_ref, o_ref):
-    o_ref[:] = jnp.sum(x_ref[:, :].astype(jnp.float32), axis=1).astype(o_ref.dtype)
+    o_ref[:, :] = jnp.sum(x_ref[:, :].astype(jnp.float32), axis=1, keepdims=True)
 
 
 def workload(X):
@@ -34,7 +34,7 @@ def workload(X):
     M = CONFIG["M"]
     return pl.pallas_call(
         _kernel,
-        out_shape=jax.ShapeDtypeStruct((M,), jnp.float32),
+        out_shape=jax.ShapeDtypeStruct((M, 1), jnp.float32),
         interpret=interpret,
     )(X)
 

@@ -1,10 +1,11 @@
 """Taxonomy cell 02_vmem_tile_layout -- NAIVE variant.
 
-Elementwise `y = x * SCALE + BIAS` over a 256x256 bf16 array, gridded with a (4, 64)
-block. Pallas TPU requires a block's last two dimensions to be divisible by 8 and 128
-respectively (independent of dtype); 4 is not a multiple of 8 and 64 is not a
-multiple of 128. Mosaic pads each block up to the (8, 128) tile boundary, and the
-small block yields 256 grid steps versus optimized_kernel.py's 16.
+Elementwise `y = x * SCALE + BIAS` over a 1024x1024 bf16 array, gridded with the
+smallest block Pallas TPU accepts, (8, 128). A block's last two dimensions must be
+divisible by 8 and 128 (or equal the array's dimensions); shapes that violate this are
+rejected at lowering with a ValueError. Legal but tiny blocks compile, and cost one
+grid step (with its fixed DMA and loop overhead) per 8x128 tile: 1024 steps here,
+versus 8 in optimized_kernel.py.
 
 Same math and output shape as optimized_kernel.py; only the block shape differs.
 """
@@ -17,10 +18,10 @@ from jax.experimental import pallas as pl
 
 CONFIG = {
     "name": "vmem_tile_layout_naive",
-    "M": 256,
-    "N": 256,
-    "block_m": 4,
-    "block_n": 64,
+    "M": 1024,
+    "N": 1024,
+    "block_m": 8,
+    "block_n": 128,
     "scale": 2.0,
     "bias": 0.5,
 }

@@ -25,11 +25,12 @@ CONFIG = {
     "bias": 0.5,
 }
 
-_ABSTRACT_TPU_V5E = jax.sharding.AbstractMesh(
-    (),
-    (),
-    abstract_device=jax.sharding.AbstractDevice(device_kind="TPU v5e", num_cores=1, platform="tpu"),
-)
+def _abstract_tpu_mesh():
+    return jax.sharding.AbstractMesh(
+        (),
+        (),
+        abstract_device=jax.sharding.AbstractDevice(device_kind="TPU v5e", num_cores=1, platform="tpu"),
+    )
 
 
 def create_inputs(dtype=jnp.bfloat16):
@@ -59,7 +60,7 @@ def workload(X):
     mesh_ctx = (
         contextlib.nullcontext()
         if jax.default_backend() == "tpu"
-        else jax.sharding.use_abstract_mesh(_ABSTRACT_TPU_V5E)
+        else jax.sharding.use_abstract_mesh(_abstract_tpu_mesh())
     )
     with mesh_ctx:
         return pl.pallas_call(
