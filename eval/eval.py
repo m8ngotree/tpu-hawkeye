@@ -108,6 +108,15 @@ def main() -> None:
     parser.add_argument("--num-iters", type=int, default=50)
     args = parser.parse_args()
 
+    if "pallas_call" not in args.kernel.read_text():
+        result = {"workload": args.workload, "status": "rejected", "error": (
+            "kernel must implement its main computation with pl.pallas_call; "
+            "plain JAX is not accepted")}
+        if (HERE / "JAXBench").exists():
+            _record(result, args.kernel)
+        print(json.dumps(result, indent=2))
+        sys.exit(1)
+
     os.environ["PALLAS_INTERPRET"] = "1" if args.interpret else "0"
     from JAXBench.harness.evaluator import evaluate_kernel
 

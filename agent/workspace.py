@@ -18,6 +18,17 @@ EVAL_PY = REPO_ROOT / "eval" / "eval.py"
 JAXBENCH_BENCHMARKS = REPO_ROOT / "external" / "accelerator-agents" / "JAXBench" / "benchmark"
 KERNEL_POOL_ROOT = REPO_ROOT / "results" / "kernel_pool"
 
+KERNEL_STUB = '''"""Write the kernel here.
+
+Define workload(*inputs) with the same inputs and output as baseline.py. The main computation
+must be a Pallas kernel (pl.pallas_call).
+"""
+
+
+def workload(*inputs):
+    raise NotImplementedError
+'''
+
 TASK_PROMPT_TEMPLATE = Template(
     """\
 # Task: Write an optimized $problem_type kernel for TPU $generation
@@ -25,24 +36,29 @@ TASK_PROMPT_TEMPLATE = Template(
 Score = TFLOPS / baseline_tflops (higher is better). Must pass correctness first.
 
 ## Workspace
-- `baseline.py` -- the reference implementation: `create_inputs()` builds the inputs and
+- `baseline.py` -- the problem specification: `create_inputs()` builds the inputs and
   `workload(*inputs)` is the math. Your kernel must produce the same output for the same inputs.
-- `kernel.py` -- edit this. It starts as a copy of `baseline.py` (already correct). Must define
-  `workload(*inputs)` taking the same inputs (plain JAX or Pallas).
+  It is a plain-JAX reference, not a kernel to copy: it exists to define the problem and to
+  give the timing you are compared against.
+- `kernel.py` -- write this from scratch. It starts as an empty stub. It must define
+  `workload(*inputs)` taking the same inputs and returning the same output as `baseline.py`,
+  and the main computation must be a Pallas kernel (`pl.pallas_call`). Plain JAX rewrites do
+  not count and are rejected.
 - `eval.py` -- run `python eval.py --workload $workload_name --kernel kernel.py --tpu $generation`
   (runs on the TPU). Prints a JSON result and exits 0 iff correct. For a correct kernel the
   result includes a `diagnosis` block: achieved HBM bandwidth and MXU utilization against the
   chip's peaks, the workload's arithmetic intensity, whether it is memory- or compute-bound, and
   how close the kernel is to that limit (`pct_of_roofline_limit`). It also remembers the fastest
-  correct kernel you have evaluated; that one is what gets scored, so a failed experiment does
-  not lose earlier progress.
+  correct Pallas kernel you have evaluated; that one is what gets scored, so a failed experiment
+  does not lose earlier progress.
 $taxonomy_section$kernel_pool_section
 ## Workflow
 Work only inside this directory; do not look for files elsewhere on the machine.
 
-1. Run `eval.py` to see the reference's timing and `diagnosis`.
-2. Identify what's limiting throughput, make ONE targeted change to `kernel.py`, re-evaluate.
-   Keep the change only if it stays correct and gets faster. Repeat.
+1. Read `baseline.py` to understand the problem, then write a first correct Pallas kernel in
+   `kernel.py` and evaluate it.
+2. Use the `diagnosis` block to identify what is limiting throughput, make ONE targeted change
+   to `kernel.py`, re-evaluate. Keep the change only if it stays correct and gets faster. Repeat.
 3. Stop when you're out of ideas or turns, whichever comes first.
 """
 )
@@ -104,9 +120,7 @@ def build_workspace(
 
     shutil.copy(JAXBENCH_BENCHMARKS / workload_name / "baseline.py", out_dir / "baseline.py")
 
-    (out_dir / "kernel.py").write_text(
-        starting_kernel if starting_kernel is not None else (out_dir / "baseline.py").read_text()
-    )
+    (out_dir / "kernel.py").write_text(starting_kernel if starting_kernel is not None else KERNEL_STUB)
 
     taxonomy_section = ""
     if use_taxonomy:

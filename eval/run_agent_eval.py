@@ -108,8 +108,8 @@ def run_one(workload, condition, rep, args):
                           prompt_tokens=agent_res.prompt_tokens,
                           completion_tokens=agent_res.completion_tokens,
                           api_seconds=agent_res.api_seconds, tool_seconds=agent_res.tool_seconds)
-        scored = ws / "best_kernel.py" if (ws / "best_kernel.py").exists() else ws / "kernel.py"
-        record["scored_file"] = scored.name
+        scored = ws / "best_kernel.py" if (ws / "best_kernel.py").exists() else None
+        record["scored_file"] = scored.name if scored else None
         log = ws / "eval_log.jsonl"
         entries = [json.loads(l) for l in log.read_text().splitlines()] if log.exists() else []
         own = [e for e in entries if not e.get("is_reference")]
@@ -118,7 +118,15 @@ def run_one(workload, condition, rep, args):
         record["agent_own_kernel_evals"] = len(own)
         record["agent_own_kernels_correct"] = len(own_correct)
         record["agent_own_best_speedup"] = max((e["speedup_vs_baseline"] for e in own_correct), default=None)
-        record.update(score_in_subprocess(workload, scored, args.interpret))
+        if scored is None:
+            record.update(status="no_correct_kernel", correct=False, speedup_vs_baseline=None,
+                          kernel_median_ms=None, baseline_median_ms=None,
+                          error="the agent never produced a correct Pallas kernel")
+        else:
+            record.update(score_in_subprocess(workload, scored, args.interpret))
+        # Failed runs count as 0.01x when averaging speedups, so they lower the aggregate.
+        record["speedup_for_geomean"] = (record["speedup_vs_baseline"]
+                                         if record.get("correct") and record.get("speedup_vs_baseline") else 0.01)
     except Exception as e:
         record.update(status="harness_error", error=f"{type(e).__name__}: {e}",
                       traceback=traceback.format_exc()[-800:])

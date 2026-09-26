@@ -10,6 +10,7 @@ finished run would be (stopped_reason is recorded as "interrupted").
 """
 
 import argparse
+import types
 import json
 import re
 import shutil
@@ -35,7 +36,7 @@ def main():
     workload, rep = m["workload"], int(m["rep"])
     condition, tag = ws.parent.name, ws.parent.parent.name
 
-    scored = ws / "best_kernel.py" if (ws / "best_kernel.py").exists() else ws / "kernel.py"
+    scored = ws / "best_kernel.py" if (ws / "best_kernel.py").exists() else None
     log = ws / "eval_log.jsonl"
     entries = [json.loads(l) for l in log.read_text().splitlines()] if log.exists() else []
     own = [e for e in entries if not e.get("is_reference")]
@@ -47,10 +48,15 @@ def main():
     if trajectory.exists():
         turns = max((json.loads(l)["turn"] for l in trajectory.read_text().splitlines()), default=0)
 
-    final = run_kernel(workload, scored, tpu="v5e", interpret=args.interpret, num_warmup=5, num_iters=50)
+    if scored is None:
+        final = types.SimpleNamespace(status="no_correct_kernel", correct=False, speedup_vs_baseline=None,
+                                      kernel_median_ms=None, baseline_median_ms=None,
+                                      error="the agent never produced a correct Pallas kernel")
+    else:
+        final = run_kernel(workload, scored, tpu="v5e", interpret=args.interpret, num_warmup=5, num_iters=50)
     record = {
         "workload": workload, "condition": condition, "rep": rep, "tag": tag,
-        "turns_used": turns, "stopped_reason": "interrupted", "scored_file": scored.name,
+        "turns_used": turns, "stopped_reason": "interrupted", "scored_file": scored.name if scored else None,
         "agent_eval_calls": len(entries), "agent_own_kernel_evals": len(own),
         "agent_own_kernels_correct": len(own_correct),
         "agent_own_best_speedup": max((e["speedup_vs_baseline"] for e in own_correct), default=None),

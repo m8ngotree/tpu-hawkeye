@@ -249,7 +249,7 @@ cost; the API key is read from the environment variable `LLM_API_KEY`.
 ```
 task_prompt.md      the task text (see 6.3)
 baseline.py         the reference workload (the problem definition)
-kernel.py           what the agent edits; starts as a copy of baseline.py
+kernel.py           what the agent writes; starts as an empty stub
 eval.py             the evaluation CLI (see §7)
 JAXBench/           a private copy of the harness + ONLY this workload's baseline
 taxonomy/           the 7 cells (taxonomy condition only)
@@ -263,7 +263,8 @@ the hand-tuned `optimized.py` answer keys.
 
 `task_prompt.md` is a fixed template, filled with a problem-type string, the TPU generation
 and the workload name. It states: the score is TFLOPS relative to baseline and correctness
-comes first; what `baseline.py`, `kernel.py`, and `eval.py` are; what the `diagnosis` block
+comes first; that `baseline.py` is the problem specification (not a kernel to copy),
+`kernel.py` starts empty and must contain a Pallas kernel (`pl.pallas_call`), and what `eval.py` does; what the `diagnosis` block
 contains; that `eval.py` remembers the fastest correct kernel; and a workflow (evaluate,
 identify the limiter, make one targeted change, re-evaluate, stop when out of ideas). In the
 taxonomy condition it adds one short paragraph describing the `taxonomy/` folder. That
@@ -322,10 +323,11 @@ workspace it uses the workspace's private JAXBench copy. It calls `evaluate_kern
 ### 7.2 Best-kernel tracking
 
 After each evaluation inside a workspace, `eval.py` appends a line to `eval_log.jsonl`
-(status, speedup, and `is_reference`, true if the kernel is identical to the baseline copy).
-If the result is correct and the fastest so far, the kernel is saved as `best_kernel.py`
-with `best_score.json`. So a failed later experiment never loses earlier progress, and the
-score is "best correct kernel the agent ever evaluated", as in the paper.
+(status, speedup, and `is_reference`). `eval.py` rejects any kernel that does not contain
+`pl.pallas_call` (status `rejected`; a static text check, so it is a guard against plain-JAX
+rewrites, not a proof). If a Pallas kernel is correct and the fastest so far, it is saved as
+`best_kernel.py` with `best_score.json`. So a failed later experiment never loses earlier
+progress, and the score is "best correct Pallas kernel the agent ever evaluated", as in the paper.
 
 ### 7.3 The `diagnosis` block
 
@@ -349,7 +351,7 @@ conditions; the taxonomy's job is to help the agent act on it.
 ### 7.4 Independent final scoring (`eval/run_agent_eval.py`)
 
 The agent's own claims are never trusted. After a run ends, the runner re-scores
-`best_kernel.py` (or `kernel.py` if none) itself using `agent/runner.py` (wrapping the
+`best_kernel.py` itself using `agent/runner.py` (wrapping the
 repo's JAXBench harness, 5 warmup and 50 timed iterations) and writes `result.json`.
 
 Key fields: `workload`, `condition`, `rep`, `tag`, `turns_used`, `stopped_reason`
@@ -391,6 +393,8 @@ independently. Also report how often a correct kernel was produced at all, and c
 **Safeguards already in place.**
 - Self-contained workspaces; only the assigned workload's baseline is present.
 - Answer keys (`optimized.py`) excluded.
+- No starting kernel: `kernel.py` is an empty stub, so the agent's raw ability is measured and
+  the taxonomy is the only help beyond the problem specification (`baseline.py`).
 - Pattern guard plus rejection audit.
 - Independent re-scoring.
 - `is_reference` separates the agent's own kernels from the copied baseline.
@@ -470,6 +474,8 @@ Per run folder under `results/runs/<tag>/<condition>/<workload>_r<rep>/`:
 - `eval_log.jsonl`: the sequence of evaluations (progress over time; failures).
 - `best_kernel.py`: the scored kernel; diff it against `baseline.py`.
 - `kernel.py`: where the agent ended.
+- A run where the agent never produced a correct Pallas kernel is recorded as
+  `no_correct_kernel`, with `speedup_for_geomean` = 0.01 (the paper's treatment of failures).
 
 Questions and where to look:
 - Did it beat the baseline? `result.json`.
