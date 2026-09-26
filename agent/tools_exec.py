@@ -37,11 +37,22 @@ def _resolve(workspace: Path, path: str) -> Path:
     return resolved
 
 
+# Files that exist in the workspace so eval.py can run and keep its records, but that the agent
+# has no reason to see: the vendored evaluation harness and our bookkeeping. They are hidden from
+# read_file and list_files (eval.py itself stays readable, as in the paper's workspace).
+_HIDDEN = {"JAXBench", "eval_log.jsonl", "best_score.json", "best_kernel.py", "run_config.json", "__pycache__"}
+
+
+def _hidden(workspace: Path, target: Path) -> bool:
+    rel = target.relative_to(workspace.resolve())
+    return bool(rel.parts) and rel.parts[0] in _HIDDEN
+
+
 def read_file(workspace: Path, path: str, offset: int = 0, limit: int | None = None) -> ToolResult:
     """Read a file. `offset` (first line, 0-based) and `limit` (line count) are optional."""
     try:
         target = _resolve(workspace, path)
-        if not target.exists():
+        if not target.exists() or _hidden(workspace, target):
             return ToolResult(ok=False, output=f"no such file: {path}")
         text = target.read_text(errors="replace")
         if offset or limit is not None:
@@ -118,9 +129,10 @@ def list_files(workspace: Path, path: str = ".") -> ToolResult:
     """List a directory inside the workspace (directories end with '/')."""
     try:
         target = _resolve(workspace, path)
-        if not target.is_dir():
+        if not target.is_dir() or _hidden(workspace, target):
             return ToolResult(ok=False, output=f"not a directory: {path}")
-        names = sorted(p.name + ("/" if p.is_dir() else "") for p in target.iterdir() if p.name != "__pycache__")
+        hide = _HIDDEN if target == workspace.resolve() else {"__pycache__"}
+        names = sorted(p.name + ("/" if p.is_dir() else "") for p in target.iterdir() if p.name not in hide)
         return ToolResult(ok=True, output="\n".join(names))
     except WorkspaceEscapeError as e:
         return ToolResult(ok=False, output=str(e))

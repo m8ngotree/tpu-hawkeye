@@ -52,6 +52,13 @@ Score = TFLOPS / baseline_tflops (higher is better). Must pass correctness first
   correct Pallas kernel you have evaluated is remembered, and that one is what gets scored, so a
   failed experiment does not lose earlier progress.
 $taxonomy_section$kernel_pool_section
+## How kernels are checked and timed
+- Correctness: your output must match `baseline.py`'s output for the same inputs, elementwise,
+  within `atol = rtol = 1e-2` (outputs are compared in float32; shapes and the number of outputs
+  must match).
+- Timing: median device time over 50 timed iterations after 5 warmup iterations, measured with
+  the device profiler; speedup = baseline time / kernel time.
+
 ## Workflow
 You can list, read and write files in this directory. You cannot run other commands.
 
