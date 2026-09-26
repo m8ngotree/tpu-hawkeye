@@ -11,8 +11,10 @@ you're relying on the *outer* environment (a disposable cloud VM) being the actu
 care about.
 """
 
+import json
 import re
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -110,3 +112,29 @@ def run_bash(workspace: Path, command: str, timeout_s: int = 300) -> ToolResult:
         return ToolResult(ok=proc.returncode == 0, output=_clip(output))
     except subprocess.TimeoutExpired:
         return ToolResult(ok=False, output=f"command timed out after {timeout_s}s")
+
+
+def list_files(workspace: Path, path: str = ".") -> ToolResult:
+    """List a directory inside the workspace (directories end with '/')."""
+    try:
+        target = _resolve(workspace, path)
+        if not target.is_dir():
+            return ToolResult(ok=False, output=f"not a directory: {path}")
+        names = sorted(p.name + ("/" if p.is_dir() else "") for p in target.iterdir() if p.name != "__pycache__")
+        return ToolResult(ok=True, output="\n".join(names))
+    except WorkspaceEscapeError as e:
+        return ToolResult(ok=False, output=str(e))
+
+
+def run_eval(workspace: Path, timeout_s: int = 900) -> ToolResult:
+    """Evaluate kernel.py with the workspace's eval.py. This is the only way the agent can
+    execute code: there is no general shell, so it cannot introspect installed libraries."""
+    config = json.loads((workspace / "run_config.json").read_text())
+    cmd = [sys.executable, "eval.py", "--workload", config["workload_name"],
+           "--kernel", "kernel.py", "--tpu", config["generation"]]
+    try:
+        proc = subprocess.run(cmd, cwd=workspace, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=timeout_s)
+        return ToolResult(ok=proc.returncode == 0, output=_clip(proc.stdout + proc.stderr))
+    except subprocess.TimeoutExpired:
+        return ToolResult(ok=False, output=f"evaluation timed out after {timeout_s}s")

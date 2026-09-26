@@ -273,18 +273,24 @@ paragraph is the *only* difference between conditions.
 There is **no natural-language description of the workload**. The agent must read
 `baseline.py` to learn the math, shapes, and dtypes.
 
-### 6.4 The three tools (`agent/tools_exec.py`)
+### 6.4 The four tools (`agent/tools_exec.py`)
 
-- `read_file(path)`: returns file contents (paths clamped to the workspace).
-- `write_file(path, content)`: overwrites or creates a file.
-- `run_bash(command)`: runs a shell command in the workspace with a 300 s timeout. Output is
-  clipped to 8000 characters (first 3000, an "omitted" marker, then the last 5000) so long
-  tracebacks and compiler logs do not flood the context.
+The agent has no general shell. This is deliberate: the taxonomy is meant to be the only
+source of hardware knowledge, so the agent must not be able to print Pallas documentation,
+read library source, or browse the installed packages.
 
-`run_bash` rejects commands that mention locations outside the workspace (parent
-directories, `~`, `/home`, the repo name, and similar). This is a pattern guard, not a real
-sandbox: code the agent writes could still open arbitrary paths. Each rejection is counted
-(`guard_rejections`) so runs can be audited. The real safety boundary is the disposable VM.
+- `read_file(path, offset?, limit?)`: returns file contents (paths clamped to the workspace).
+- `list_files(path?)`: lists a directory inside the workspace.
+- `write_file(path, content)`: overwrites or creates a file (inside the workspace).
+- `run_eval()`: runs `eval.py` on `kernel.py` on the TPU and returns its JSON (clipped to 8000
+  characters: first 3000, an "omitted" marker, then the last 5000). It is the only way to execute
+  code.
+
+Residual leaks: the agent can read the vendored JAXBench harness inside its workspace, and
+`kernel.py` itself runs during evaluation, so code in it could in principle print things. Both
+are minor. `eval.py` also rejects kernels that import JAX's shipped Pallas kernels
+(`jax.experimental.pallas.ops`). The older `run_bash` tool and its path-pattern guard still exist
+in `tools_exec.py` but are not exposed.
 
 ### 6.5 The loop (`agent/harness.py`)
 
@@ -293,8 +299,8 @@ sandbox: code the agent writes could still open arbitrary paths. Each rejection 
 3. If the reply has tool calls, execute each, append results as tool messages, repeat.
 4. Stop when the model replies without tool calls, when the productive-turn budget is used up
    (default 50), or at a raw-call safety cap (default 200). A turn is **productive**, as in
-   Hawkeye, if it edits `kernel.py`, runs `eval.py`, or reads a taxonomy file for the first time;
-   listings, greps, library-source reading and other exploration are free.
+   Hawkeye, if it edits `kernel.py`, calls `run_eval`, or reads a taxonomy file for the first time;
+   listings and other file reads are free.
 
 Every turn, the **entire** message list is re-sent. So files the agent has read stay in its
 context for the rest of the run (and are paid for again as input tokens each turn); nothing
@@ -397,14 +403,14 @@ independently. Also report how often a correct kernel was produced at all, and c
 - Answer keys (`optimized.py`) excluded.
 - No starting kernel: `kernel.py` is an empty stub, so the agent's raw ability is measured and
   the taxonomy is the only help beyond the problem specification (`baseline.py`).
-- Pattern guard plus rejection audit.
+- No general shell; only read/list/write/run_eval tools (plus a pattern guard and rejection audit for the legacy shell).
 - Independent re-scoring.
 - `is_reference` separates the agent's own kernels from the copied baseline.
 - Resumable runner.
 - Taxonomy content rules (no benchmark leakage).
 
 **Known limitations.**
-- The guard is not a true sandbox.
+- Without a shell, the guard is mostly moot, but the agent's own `kernel.py` executes during evaluation, so the environment is not a true sandbox; run on a disposable VM.
 - Each `baseline.py` includes a `CONFIG` dict that can name the source model (for example a
   named LLM's operator dimensions). The agent can read it in both conditions; it does not
   bias the comparison but may help the model recall known designs.

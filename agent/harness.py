@@ -23,7 +23,7 @@ from pathlib import Path
 
 from openai import OpenAI
 
-from agent.tools_exec import REJECTION, ToolResult, read_file, run_bash, write_file
+from agent.tools_exec import REJECTION, ToolResult, list_files, read_file, run_eval, write_file
 
 TOOL_SCHEMAS = [
     {
@@ -61,26 +61,33 @@ TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
-            "name": "run_bash",
-            "description": (
-                "Run a shell command from the workspace root, e.g. "
-                "`python eval.py --workload X --kernel kernel.py`. "
-                "Returns combined stdout+stderr."
-            ),
+            "name": "list_files",
+            "description": "List a directory inside the workspace (default: the workspace root).",
             "parameters": {
                 "type": "object",
-                "properties": {"command": {"type": "string"}},
-                "required": ["command"],
+                "properties": {"path": {"type": "string"}},
             },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_eval",
+            "description": (
+                "Evaluate kernel.py on the TPU: checks correctness against baseline.py and "
+                "times it. Returns eval.py's JSON result (status, speedup, diagnosis, or the "
+                "error). This is the only way to execute code."
+            ),
+            "parameters": {"type": "object", "properties": {}},
         },
     },
 ]
 
-TOOL_IMPLS = {"read_file": read_file, "write_file": write_file, "run_bash": run_bash}
+TOOL_IMPLS = {"read_file": read_file, "write_file": write_file, "list_files": list_files, "run_eval": run_eval}
 
 SYSTEM_PROMPT = (
-    "You are an expert TPU/Pallas kernel engineer. You have tools to read/write "
-    "files and run shell commands, all relative to your workspace root. Work the "
+    "You are an expert TPU/Pallas kernel engineer. You have tools to list, read and write "
+    "files in your workspace and to evaluate your kernel. Work the "
     "task below to completion, then stop calling tools once you're satisfied or out "
     "of ideas -- don't call tools just to keep going."
 )
@@ -110,6 +117,8 @@ def _productive_actions(name: str, args: dict, seen_taxonomy: set) -> bool:
     other exploration are free. `seen_taxonomy` is updated so re-reading a file is free."""
     if name == "write_file":
         return str(args.get("path", "")).strip("./") == "kernel.py"
+    if name == "run_eval":
+        return True
     if name == "run_bash":
         command = str(args.get("command", ""))
         paths = set(_TAXONOMY_FILE.findall(command))
@@ -224,7 +233,7 @@ def run_agent(
                     result_text = result.output
                     if result_text == REJECTION:
                         guard_rejections += 1
-                    if name == "run_bash" and '"correctness"' in result_text:
+                    if name == "run_eval" and '"correctness"' in result_text:
                         try:
                             final_eval = json.loads(result_text)
                         except json.JSONDecodeError:

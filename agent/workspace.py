@@ -44,16 +44,16 @@ Score = TFLOPS / baseline_tflops (higher is better). Must pass correctness first
   `workload(*inputs)` taking the same inputs and returning the same output as `baseline.py`,
   and the main computation must be a Pallas kernel (`pl.pallas_call`). Plain JAX rewrites do
   not count and are rejected.
-- `eval.py` -- run `python eval.py --workload $workload_name --kernel kernel.py --tpu $generation`
-  (runs on the TPU). Prints a JSON result and exits 0 iff correct. For a correct kernel the
-  result includes a `diagnosis` block: achieved HBM bandwidth and MXU utilization against the
-  chip's peaks, the workload's arithmetic intensity, whether it is memory- or compute-bound, and
-  how close the kernel is to that limit (`pct_of_roofline_limit`). It also remembers the fastest
-  correct Pallas kernel you have evaluated; that one is what gets scored, so a failed experiment
-  does not lose earlier progress.
+- `eval.py` -- the evaluation script; you run it with the `run_eval` tool, which evaluates
+  `kernel.py` on the TPU. It returns a JSON result and, for a correct kernel, a `diagnosis`
+  block: achieved HBM bandwidth and MXU utilization against the chip's peaks, the workload's
+  arithmetic intensity, whether it is memory- or compute-bound, and how close the kernel is to
+  that limit (`pct_of_roofline_limit`). `run_eval` is the only way to execute code. The fastest
+  correct Pallas kernel you have evaluated is remembered, and that one is what gets scored, so a
+  failed experiment does not lose earlier progress.
 $taxonomy_section$kernel_pool_section
 ## Workflow
-Work only inside this directory; do not look for files elsewhere on the machine.
+You can list, read and write files in this directory. You cannot run other commands.
 
 1. Read `baseline.py` to understand the problem, then write a first correct Pallas kernel in
    `kernel.py` and evaluate it.
