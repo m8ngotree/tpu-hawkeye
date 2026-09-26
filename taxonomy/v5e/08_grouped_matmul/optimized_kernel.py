@@ -1,16 +1,12 @@
 """Taxonomy cell 08_grouped_matmul -- OPTIMIZED (expert) variant.
 
-Identical grouped matmul to naive_kernel.py -- same G=4 candidate weight matrices,
-same per-block group assignment -- but using `pltpu.PrefetchScalarGridSpec` instead
-of loading the whole weight tensor. `group_id` is passed as a SCALAR PREFETCH
-operand: it's resident in SMEM before the pipeline starts, and `index_map` functions
-can read it to decide, data-dependently, WHICH block of the weight tensor to DMA in
-for each grid step (`group_id_ref[i]` selects which one). Only that one (K, N) slice
-is ever VMEM-resident at a time -- O(K*N) per step instead of naive_kernel.py's
-O(G*K*N).
-
-The naive kernel's VMEM footprint grows with the number of candidates even though
-only one is used per step; this kernel's does not.
+Identical grouped matmul to naive_kernel.py (same G=8 weight matrices, same per-block
+group assignment) using `pltpu.PrefetchScalarGridSpec`. `group_id` is a SCALAR PREFETCH
+operand: resident in SMEM before the pipeline starts and readable from `index_map`
+functions, so each grid step DMAs only the (K, N) slice its block selects
+(`group_id_ref[i]`). Only that slice is VMEM-resident, and only the 4 selected
+matrices are ever read from HBM: O(K*N) VMEM per step and traffic proportional to the
+matrices used, instead of naive_kernel.py's O(G*K*N) for all 8.
 """
 
 import os
@@ -22,11 +18,11 @@ from jax.experimental.pallas import tpu as pltpu
 
 CONFIG = {
     "name": "grouped_matmul_optimized",
-    "G": 4,
-    "K": 64,
-    "N": 64,
-    "block_m": 16,
-    "num_blocks": 8,
+    "G": 8,
+    "K": 512,
+    "N": 512,
+    "block_m": 256,
+    "num_blocks": 4,
 }
 
 
@@ -37,15 +33,15 @@ def create_inputs(dtype=jnp.bfloat16):
     BLOCK_M, num_blocks = CONFIG["block_m"], CONFIG["num_blocks"]
     M = BLOCK_M * num_blocks
     X = jax.random.normal(k1, (M, K), dtype=dtype)
-    W = jax.random.normal(k2, (G, K, N), dtype=dtype) * 0.1
-    group_id = jnp.array([i % G for i in range(num_blocks)], dtype=jnp.int32)
+    W = jax.random.normal(k2, (G, K, N), dtype=dtype) * 0.05
+    # Each block selects one of the G weight matrices; only num_blocks < G are used.
+    group_id = jnp.array([(2 * i) % G for i in range(num_blocks)], dtype=jnp.int32)
     return X, W, group_id
 
 
 def _kernel(group_id_ref, x_ref, w_ref, o_ref):
-    # group_id_ref is the scalar-prefetch ref -- already consulted by index_map below
-    # to pick which weight block got DMA'd in; the kernel body itself just uses
-    # whatever arrived.
+    # group_id_ref is the scalar-prefetch ref, already consulted by index_map to pick
+    # which weight block was DMA'd in; the body just uses whatever arrived.
     o_ref[:, :] = jnp.dot(x_ref[:, :], w_ref[0, :, :], preferred_element_type=jnp.float32)
 
 
@@ -60,7 +56,7 @@ def workload(X, W, group_id):
         grid=(num_blocks,),
         in_specs=[
             pl.BlockSpec((BLOCK_M, K), lambda i, group_id_ref: (i, 0)),
-            pl.BlockSpec((1, K, N), lambda i, group_id_ref: (group_id_ref[i], 0, 0)),  # data-dependent!
+            pl.BlockSpec((1, K, N), lambda i, group_id_ref: (group_id_ref[i], 0, 0)),
         ],
         out_specs=pl.BlockSpec((BLOCK_M, N), lambda i, group_id_ref: (i, 0)),
     )

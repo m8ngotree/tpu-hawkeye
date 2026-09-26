@@ -1,14 +1,14 @@
 {
   "cell_name": "grouped_matmul",
-  "task_description": "Grouped matmul: 8 row-blocks of a (128, 64) input, each multiplied by one of 4 (64, 64) weight matrices selected by a per-block group_id array. Whole weight tensor VMEM-resident versus scalar-prefetch-driven index_map.",
+  "task_description": "Grouped matmul: 4 row-blocks of a (1024, 512) input, each multiplied by one of 8 (512, 512) weight matrices selected by a per-block group_id array (4 of the 8 used). Whole weight tensor VMEM-resident versus scalar-prefetch-driven index_map.",
   "profiling": {
     "metrics": [
       {
         "name": "vmem_resident_weight_elems",
-        "description": "Weight-tensor elements resident in VMEM per grid step: G*K*N when every candidate is resident, K*N when only the selected slice is fetched via scalar prefetch. Scales with G.",
+        "description": "Weight-tensor elements resident in VMEM per grid step: G*K*N when every candidate is resident, K*N when only the selected slice is fetched via scalar prefetch. HBM weight traffic likewise covers all G matrices versus only those selected.",
         "direction": "lower_is_better",
-        "expected_naive": 16384,
-        "expected_optimized": 4096
+        "expected_naive": 2097152,
+        "expected_optimized": 262144
       },
       {
         "name": "achieved_tflops_pct_of_peak_bf16",

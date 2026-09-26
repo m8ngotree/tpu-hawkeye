@@ -1,20 +1,17 @@
 """Taxonomy cell 08_grouped_matmul -- NAIVE variant.
 
-Grouped matmul: G=4 candidate weight matrices of shape (K, N); the input's M rows are
-split into 8 contiguous blocks of BLOCK_M rows, and `group_id[i]` says which of the
-G weight matrices block i's rows should be multiplied by -- a runtime-computed
-selection, not a static one.
+Grouped matmul: G=8 candidate weight matrices of shape (K, N) = (512, 512); the input's
+M rows are split into 4 contiguous blocks of 256 rows, and `group_id[i]` says which of
+the G weight matrices block i's rows are multiplied by -- a runtime-computed selection.
+Only 4 of the 8 matrices are used in a call.
 
-This naive version doesn't use scalar-prefetch at all: the ENTIRE (G, K, N) weight
-tensor is kept VMEM-resident for every grid step (BlockSpec index_map always returns
-(0, 0, 0)), and the per-block selection happens via a plain array index
-(`w_all_ref[g]`) inside the kernel body. Correct, but VMEM footprint for the weight
-tensor is O(G*K*N) -- every candidate, all the time -- when any single step only ever
-needs one K*N slice. That doesn't scale: more candidates means more VMEM spent on
-weights you're not using this step, regardless of how many you actually select.
+This naive version does not use scalar prefetch: the ENTIRE (G, K, N) weight tensor is
+made VMEM-resident (the BlockSpec index_map always returns (0, 0, 0), so all 8 matrices
+are DMA'd in), and the per-block selection is a plain array index (`w_all_ref[g]`)
+inside the kernel body. VMEM footprint and HBM traffic for the weights are O(G*K*N)
+whichever matrices are actually selected.
 
-See optimized_kernel.py for the scalar-prefetch alternative: O(K*N) VMEM per step
-instead of O(G*K*N).
+See optimized_kernel.py for the scalar-prefetch alternative.
 """
 
 import os
@@ -26,11 +23,11 @@ from jax.experimental.pallas import tpu as pltpu
 
 CONFIG = {
     "name": "grouped_matmul_naive",
-    "G": 4,
-    "K": 64,
-    "N": 64,
-    "block_m": 16,
-    "num_blocks": 8,
+    "G": 8,
+    "K": 512,
+    "N": 512,
+    "block_m": 256,
+    "num_blocks": 4,
 }
 
 
@@ -41,9 +38,9 @@ def create_inputs(dtype=jnp.bfloat16):
     BLOCK_M, num_blocks = CONFIG["block_m"], CONFIG["num_blocks"]
     M = BLOCK_M * num_blocks
     X = jax.random.normal(k1, (M, K), dtype=dtype)
-    W = jax.random.normal(k2, (G, K, N), dtype=dtype) * 0.1
-    # Round-robin group assignment per block -- exercises every group at least once.
-    group_id = jnp.array([i % G for i in range(num_blocks)], dtype=jnp.int32)
+    W = jax.random.normal(k2, (G, K, N), dtype=dtype) * 0.05
+    # Each block selects one of the G weight matrices; only num_blocks < G are used.
+    group_id = jnp.array([(2 * i) % G for i in range(num_blocks)], dtype=jnp.int32)
     return X, W, group_id
 
 
@@ -59,18 +56,15 @@ def workload(X, W, group_id):
     G, K, N = CONFIG["G"], CONFIG["K"], CONFIG["N"]
     BLOCK_M, num_blocks = CONFIG["block_m"], CONFIG["num_blocks"]
     M = BLOCK_M * num_blocks
-    grid = (num_blocks,)
-    in_specs = [
-        pl.BlockSpec((BLOCK_M, K), lambda i: (i, 0)),
-        pl.BlockSpec((G, K, N), lambda i: (0, 0, 0)),  # whole weight tensor, every step
-        pl.BlockSpec(memory_space=pltpu.SMEM),
-    ]
-    out_spec = pl.BlockSpec((BLOCK_M, N), lambda i: (i, 0))
     return pl.pallas_call(
         _kernel,
-        grid=grid,
-        in_specs=in_specs,
-        out_specs=out_spec,
+        grid=(num_blocks,),
+        in_specs=[
+            pl.BlockSpec((BLOCK_M, K), lambda i: (i, 0)),
+            pl.BlockSpec((G, K, N), lambda i: (0, 0, 0)),  # whole weight tensor
+            pl.BlockSpec(memory_space=pltpu.SMEM),
+        ],
+        out_specs=pl.BlockSpec((BLOCK_M, N), lambda i: (i, 0)),
         out_shape=jax.ShapeDtypeStruct((M, N), jnp.float32),
         interpret=interpret,
     )(X, W, group_id)

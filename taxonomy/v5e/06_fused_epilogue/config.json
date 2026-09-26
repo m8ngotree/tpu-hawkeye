@@ -1,6 +1,6 @@
 {
   "cell_name": "fused_epilogue",
-  "task_description": "relu(A @ B + bias) for a 128x128x128 bf16 matmul: two separate pallas_calls versus one fused pallas_call.",
+  "task_description": "relu(A @ B + bias) with A (2048,1024) and B (1024,1024) in bf16, row-blocked: two separate pallas_calls (8 MB float32 intermediate through HBM) versus one fused pallas_call.",
   "profiling": {
     "metrics": [
       {
