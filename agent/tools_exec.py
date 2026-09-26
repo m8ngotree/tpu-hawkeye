@@ -70,6 +70,21 @@ REJECTION = (
 )
 
 
+MAX_OUTPUT_CHARS = 8000
+HEAD_CHARS = 3000
+
+
+def _clip(output: str) -> str:
+    """Keep the start and the end of long output, with a visible marker in between: error
+    messages can be at either end (Python tracebacks end with the error; compiler errors
+    often begin with it)."""
+    if len(output) <= MAX_OUTPUT_CHARS:
+        return output
+    tail = MAX_OUTPUT_CHARS - HEAD_CHARS
+    omitted = len(output) - MAX_OUTPUT_CHARS
+    return f"{output[:HEAD_CHARS]}\n[... {omitted} characters omitted ...]\n{output[-tail:]}"
+
+
 def run_bash(workspace: Path, command: str, timeout_s: int = 300) -> ToolResult:
     if _OUTSIDE_WORKSPACE.search(command.replace(str(workspace), "<WS>")):
         return ToolResult(ok=False, output=REJECTION)
@@ -83,6 +98,6 @@ def run_bash(workspace: Path, command: str, timeout_s: int = 300) -> ToolResult:
             timeout=timeout_s,
         )
         output = proc.stdout + proc.stderr
-        return ToolResult(ok=proc.returncode == 0, output=output[-8000:])
+        return ToolResult(ok=proc.returncode == 0, output=_clip(output))
     except subprocess.TimeoutExpired:
         return ToolResult(ok=False, output=f"command timed out after {timeout_s}s")
