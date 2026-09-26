@@ -26,7 +26,10 @@ else:
 def _record(result: dict, kernel_path: Path) -> None:
     """Keep a log of evaluations and a copy of the fastest correct kernel seen so far."""
     speedup = result.get("speedup_vs_baseline")
-    entry = {"time": time.time(), "status": result.get("status"), "speedup_vs_baseline": speedup}
+    reference = HERE / "baseline.py"
+    is_reference = reference.exists() and Path(kernel_path).read_text() == reference.read_text()
+    entry = {"time": time.time(), "status": result.get("status"), "speedup_vs_baseline": speedup,
+             "is_reference": is_reference}
     with open(HERE / "eval_log.jsonl", "a") as f:
         f.write(json.dumps(entry) + "\n")
     if result.get("status") != "correct" or speedup is None:

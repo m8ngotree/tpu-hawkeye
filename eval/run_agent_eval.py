@@ -95,7 +95,13 @@ def run_one(workload, condition, rep, args):
         scored = ws / "best_kernel.py" if (ws / "best_kernel.py").exists() else ws / "kernel.py"
         record["scored_file"] = scored.name
         log = ws / "eval_log.jsonl"
-        record["agent_eval_calls"] = len(log.read_text().splitlines()) if log.exists() else 0
+        entries = [json.loads(l) for l in log.read_text().splitlines()] if log.exists() else []
+        own = [e for e in entries if not e.get("is_reference")]
+        own_correct = [e for e in own if e.get("status") == "correct"]
+        record["agent_eval_calls"] = len(entries)
+        record["agent_own_kernel_evals"] = len(own)
+        record["agent_own_kernels_correct"] = len(own_correct)
+        record["agent_own_best_speedup"] = max((e["speedup_vs_baseline"] for e in own_correct), default=None)
         final = run_kernel(
             workload, scored, tpu="v5e", interpret=args.interpret,
             num_warmup=5, num_iters=50,
@@ -143,7 +149,8 @@ def main():
                 r = run_one(workload, condition, rep, args)
                 records.append(r)
                 print(f"{workload:<28}{condition:<10}rep{rep}  status={r.get('status')}  "
-                      f"speedup={r.get('speedup_vs_baseline')}  turns={r.get('turns_used')}")
+                      f"speedup={r.get('speedup_vs_baseline')}  turns={r.get('turns_used')}  "
+                      f"own_kernels_correct={r.get('agent_own_kernels_correct')}/{r.get('agent_own_kernel_evals')}")
     out = ROOT / "results" / f"{args.tag}_summary.json"
     out.write_text(json.dumps(records, indent=2))
     print("saved", out)
