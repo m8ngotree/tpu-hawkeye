@@ -11,7 +11,9 @@ kernel is correct.
 import argparse
 import json
 import os
+import shutil
 import sys
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -19,6 +21,21 @@ if (HERE / "JAXBench").exists():
     sys.path.insert(0, str(HERE))
 else:
     sys.path.insert(0, str(HERE.parent / "external" / "accelerator-agents"))
+
+
+def _record(result: dict, kernel_path: Path) -> None:
+    """Keep a log of evaluations and a copy of the fastest correct kernel seen so far."""
+    speedup = result.get("speedup_vs_baseline")
+    entry = {"time": time.time(), "status": result.get("status"), "speedup_vs_baseline": speedup}
+    with open(HERE / "eval_log.jsonl", "a") as f:
+        f.write(json.dumps(entry) + "\n")
+    if result.get("status") != "correct" or speedup is None:
+        return
+    best_file = HERE / "best_score.json"
+    best = json.loads(best_file.read_text())["speedup_vs_baseline"] if best_file.exists() else -1
+    if speedup > best:
+        shutil.copy(kernel_path, HERE / "best_kernel.py")
+        best_file.write_text(json.dumps({"speedup_vs_baseline": speedup}))
 
 
 def main() -> None:
@@ -41,6 +58,8 @@ def main() -> None:
         num_warmup=args.num_warmup,
         num_iters=args.num_iters,
     )
+    if (HERE / "JAXBench").exists():  # inside an agent workspace
+        _record(result, args.kernel)
     print(json.dumps(result, indent=2))
     sys.exit(0 if result["status"] == "correct" else 1)
 

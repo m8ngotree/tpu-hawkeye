@@ -5,8 +5,9 @@
 
 Conditions: `taxonomy` (workspace includes taxonomy/) and `none` (it does not).
 Every other setting is identical between conditions. The final kernel is re-scored
-independently of anything the agent reported: JAXBench correctness check plus timing
-against the JAXBench baseline.
+independently of anything the agent reported: the best correct kernel the agent evaluated
+(best_kernel.py, else its final kernel.py) is re-checked with the JAXBench correctness
+check and timed against the JAXBench baseline.
 
 Runs that already have a result.json are skipped unless they ended in a harness_error
 (--force redoes all), so a crashed or
@@ -59,8 +60,12 @@ def run_one(workload, condition, rep, args):
             )
             record.update(turns_used=agent_res.turns_used, stopped_reason=agent_res.stopped_reason,
                           guard_rejections=agent_res.guard_rejections)
+        scored = ws / "best_kernel.py" if (ws / "best_kernel.py").exists() else ws / "kernel.py"
+        record["scored_file"] = scored.name
+        log = ws / "eval_log.jsonl"
+        record["agent_eval_calls"] = len(log.read_text().splitlines()) if log.exists() else 0
         final = run_kernel(
-            workload, ws / "kernel.py", tpu="v5e", interpret=args.interpret,
+            workload, scored, tpu="v5e", interpret=args.interpret,
             num_warmup=5, num_iters=50,
         )
         record.update(
@@ -74,7 +79,7 @@ def run_one(workload, condition, rep, args):
                       traceback=traceback.format_exc()[-800:])
     record["wall_s"] = round(time.time() - t0, 1)
     run_dir.mkdir(parents=True, exist_ok=True)
-    for name in ("trajectory.jsonl", "kernel.py", "task_prompt.md"):
+    for name in ("trajectory.jsonl", "kernel.py", "best_kernel.py", "eval_log.jsonl", "task_prompt.md"):
         if (work_dir / name).exists():
             shutil.copy(work_dir / name, run_dir / name)
     result_path.write_text(json.dumps(record, indent=2))

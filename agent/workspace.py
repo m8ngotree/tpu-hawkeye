@@ -27,20 +27,21 @@ Score = TFLOPS / baseline_tflops (higher is better). Must pass correctness first
 ## Workspace
 - `baseline.py` -- the reference implementation: `create_inputs()` builds the inputs and
   `workload(*inputs)` is the math. Your kernel must produce the same output for the same inputs.
-- `kernel.py` -- edit this. Must define `workload(*inputs)` taking the same inputs (plain JAX or Pallas).
+- `kernel.py` -- edit this. It starts as a copy of `baseline.py` (already correct). Must define
+  `workload(*inputs)` taking the same inputs (plain JAX or Pallas).
 - `eval.py` -- run `python eval.py --workload $workload_name --kernel kernel.py --tpu $generation`
   (add `--interpret` to check correctness on CPU with no TPU hours spent; drop it for
-  real timing on TPU). Prints a JSON result and exits 0 iff correct.
+  real timing on TPU). Prints a JSON result and exits 0 iff correct. It also remembers the fastest
+  correct kernel you have evaluated; that one is what gets scored, so a failed experiment does
+  not lose earlier progress.
 $taxonomy_section$kernel_pool_section
 ## Workflow
 Work only inside this directory; do not look for files elsewhere on the machine.
 
-1. Get a *correct* kernel first (interpret mode is enough for this -- no TPU needed).
-2. Profile on real TPU hardware (drop --interpret) and read the reported TFLOPS /
-   utilization_pct.
-3. Identify what's limiting throughput, make ONE targeted change, re-evaluate. Keep
-   the change only if it doesn't regress correctness or speed. Repeat.
-4. Stop when you're out of ideas or turns, whichever comes first.
+1. Run `eval.py` on TPU (drop --interpret) to see the reference's timing and utilization.
+2. Identify what's limiting throughput, make ONE targeted change to `kernel.py`, re-evaluate.
+   Keep the change only if it stays correct and gets faster. Repeat.
+3. Stop when you're out of ideas or turns, whichever comes first.
 """
 )
 
@@ -102,7 +103,7 @@ def build_workspace(
     shutil.copy(JAXBENCH_BENCHMARKS / workload_name / "baseline.py", out_dir / "baseline.py")
 
     (out_dir / "kernel.py").write_text(
-        starting_kernel or "def workload(*inputs):\n    raise NotImplementedError\n"
+        starting_kernel if starting_kernel is not None else (out_dir / "baseline.py").read_text()
     )
 
     taxonomy_section = ""
