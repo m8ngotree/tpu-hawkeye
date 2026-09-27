@@ -22,6 +22,7 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+import openai
 from openai import OpenAI
 
 from agent.tools_exec import REJECTION, ToolResult, list_files, read_file, run_eval, write_file
@@ -145,6 +146,20 @@ def _productive_actions(name: str, args: dict) -> bool:
     return False
 
 
+def _create_with_retry(client, model, messages, attempts: int = 6):
+    """One model call, retried with growing waits on transient network or server errors (the
+    client library retries a few times itself; a longer outage would otherwise end the run)."""
+    transient = (openai.APIConnectionError, openai.APITimeoutError, openai.RateLimitError,
+                 openai.InternalServerError)
+    for attempt in range(attempts):
+        try:
+            return client.chat.completions.create(model=model, messages=messages, tools=TOOL_SCHEMAS)
+        except transient:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(min(10 * 2 ** attempt, 300))
+
+
 def run_agent(
     workspace: Path,
     model: str = "deepseek-chat",
@@ -164,7 +179,7 @@ def run_agent(
     if not api_key:
         raise RuntimeError(f"set {api_key_env} to your LLM provider's API key")
 
-    client = OpenAI(api_key=api_key, base_url=base_url)
+    client = OpenAI(api_key=api_key, base_url=base_url, max_retries=6, timeout=600)
 
     task_prompt = (workspace / "task_prompt.md").read_text()
     messages: list[dict] = [
@@ -196,7 +211,7 @@ def run_agent(
             if on_event:
                 on_event("turn_start", turn, max_raw_turns, productive_turns, max_productive_turns)
             t0 = time.time()
-            response = client.chat.completions.create(model=model, messages=messages, tools=TOOL_SCHEMAS)
+            response = _create_with_retry(client, model, messages)
             call_seconds = time.time() - t0
             api_seconds += call_seconds
             usage = getattr(response, "usage", None)
