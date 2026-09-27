@@ -36,6 +36,19 @@ from agent.harness import run_agent
 from agent.workspace import build_workspace
 
 
+def ended_by_truncation(run_dir, previous):
+    """Runs made before truncated replies were handled could stop early because one reply was cut
+    off at the token limit (finish_reason 'length', no tool call). Such a run is redone."""
+    if previous.get("stopped_reason") != "done":
+        return False
+    try:
+        rows = [json.loads(l) for l in (run_dir / "trajectory.jsonl").read_text().splitlines()]
+        last = [r for r in rows if r["role"] == "assistant"][-1]
+        return last.get("finish_reason") == "length" and not last.get("tool_calls")
+    except Exception:
+        return False
+
+
 def code_version():
     try:
         return subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True,
@@ -98,7 +111,7 @@ def run_one(workload, condition, rep, args):
     result_path = run_dir / "result.json"
     if result_path.exists() and not args.force:
         previous = json.loads(result_path.read_text())
-        if previous.get("status") != "harness_error":
+        if previous.get("status") != "harness_error" and not ended_by_truncation(run_dir, previous):
             return previous
     t0 = time.time()
     try:
@@ -119,6 +132,7 @@ def run_one(workload, condition, rep, args):
             record.update(turns_used=agent_res.turns_used, stopped_reason=agent_res.stopped_reason,
                           guard_rejections=agent_res.guard_rejections,
                           productive_turns=agent_res.productive_turns,
+                          truncated_replies=agent_res.truncated_replies,
                           tool_counts=agent_res.tool_counts, tool_errors=agent_res.tool_errors,
                           path_escape_attempts=agent_res.path_escape_attempts,
                           kernel_writes=agent_res.kernel_writes,

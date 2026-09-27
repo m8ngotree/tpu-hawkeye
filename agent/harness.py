@@ -108,6 +108,7 @@ class AgentRunResult:
     api_seconds: float = 0.0
     tool_seconds: float = 0.0
     productive_turns: int = 0
+    truncated_replies: int = 0
     tool_counts: dict | None = None
     tool_errors: int = 0
     path_escape_attempts: int = 0
@@ -146,6 +147,11 @@ def _productive_actions(name: str, args: dict) -> bool:
     return False
 
 
+# Upper bound on one reply, as in the paper (max_tokens = 16,384). Without it a runaway reply can run to
+# the provider's limit (65,536 tokens) and end a run through truncation.
+MAX_REPLY_TOKENS = 16384
+
+
 def _create_with_retry(client, model, messages, attempts: int = 6):
     """One model call, retried with growing waits on transient network or server errors (the
     client library retries a few times itself; a longer outage would otherwise end the run)."""
@@ -153,7 +159,8 @@ def _create_with_retry(client, model, messages, attempts: int = 6):
                  openai.InternalServerError)
     for attempt in range(attempts):
         try:
-            return client.chat.completions.create(model=model, messages=messages, tools=TOOL_SCHEMAS)
+            return client.chat.completions.create(model=model, messages=messages, tools=TOOL_SCHEMAS,
+                                                  max_tokens=MAX_REPLY_TOKENS)
         except transient:
             if attempt == attempts - 1:
                 raise
@@ -192,6 +199,7 @@ def run_agent(
     stopped_reason = "max_raw_turns"
     productive_turns = 0
     tool_counts: Counter = Counter()
+    truncated_replies = consecutive_truncations = 0
     tool_errors = path_escape_attempts = kernel_writes = 0
     taxonomy_reads: list = []
     eval_history: list = []
@@ -243,9 +251,18 @@ def run_agent(
 
             if on_event:
                 on_event("assistant", turn, message.content, message.tool_calls or [])
+            if response.choices[0].finish_reason == "length":
+                truncated_replies += 1
             if not message.tool_calls:
+                if response.choices[0].finish_reason == "length" and consecutive_truncations < 3:
+                    # The reply was cut off (too long), not finished: ask for a shorter one instead of stopping.
+                    consecutive_truncations += 1
+                    messages.append({"role": "user", "content": "Your last reply was cut off because it was too "
+                                     "long. Continue with your next step, keeping the reply short; use a tool call."})
+                    continue
                 stopped_reason = "done"
                 break
+            consecutive_truncations = 0
 
             turn_productive = False
             for tool_call in message.tool_calls:
@@ -334,6 +351,7 @@ def run_agent(
         api_seconds=round(api_seconds, 1),
         tool_seconds=round(tool_seconds, 1),
         productive_turns=productive_turns,
+        truncated_replies=truncated_replies,
         tool_counts=dict(tool_counts),
         tool_errors=tool_errors,
         path_escape_attempts=path_escape_attempts,
