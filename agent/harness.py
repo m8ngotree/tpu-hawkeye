@@ -250,14 +250,24 @@ def run_agent(
             turn_productive = False
             for tool_call in message.tool_calls:
                 name = tool_call.function.name
-                args = json.loads(tool_call.function.arguments or "{}")
-                if _productive_actions(name, args):
+                try:
+                    args = json.loads(tool_call.function.arguments or "{}")
+                    if not isinstance(args, dict):
+                        raise ValueError("arguments must be a JSON object")
+                    bad_arguments = None
+                except (json.JSONDecodeError, ValueError) as e:
+                    args, bad_arguments = {}, e  # e.g. a long reply cut off mid-argument
+                if bad_arguments is None and _productive_actions(name, args):
                     turn_productive = True
                 impl = TOOL_IMPLS.get(name)
 
                 tool_elapsed = 0.0
                 result = None
-                if impl is None:
+                if bad_arguments is not None:
+                    result_text = (f"tool error: the arguments of your {name} call were not valid JSON "
+                                   f"({bad_arguments}). The reply may have been cut off; retry with "
+                                   f"shorter content.")
+                elif impl is None:
                     result_text = f"unknown tool: {name}"
                 else:
                     t1 = time.time()
